@@ -297,4 +297,49 @@ default-deny grants all behave identically to production Postgres — only
 the platform-specific tables/triggers Supabase adds around `auth.users`
 are stubbed).
 
+## 2026-08-31 — Account deletion happens immediately, not after a grace period
+
+**Decision:** `delete-account` deletes storage + the auth user (cascading
+through every table) as soon as the user confirms in-app, rather than
+scheduling a deferred purge after N days.
+
+**Rationale:** A grace-period purge needs a scheduler (cron Edge Function
+or equivalent) that actually runs — this build and this sandbox have none,
+and claiming a "30-day grace period" without a job that enforces it would
+be exactly the kind of unverified claim the task forbids. Immediate
+deletion is the honest thing this repo can actually promise. A
+production deployment with real scheduling infrastructure could
+reasonably switch to a grace-period model — `account_deletion_requests`
+already records `requested_at`/`scheduled_purge_at` in anticipation of
+that, it's just not wired to anything that acts on it yet. Documented as
+a real gap in `docs/IMPLEMENTATION_STATUS.md`, not silently glossed over.
+
+## 2026-08-31 — Data export: request is real, fulfillment is a manual step
+
+**Decision:** `request_data_export()` writes a genuine, RLS-protected,
+auditable row. Nothing in this repo currently compiles or emails the
+actual data archive.
+
+**Rationale:** Building a real export pipeline needs either an email-
+sending provider (none configured — see
+`docs/OWNER_ACTIONS_REQUIRED.md`) or a download-and-decrypt flow, both of
+which are more than a beta needs immediately and both need owner
+decisions (which provider, what format). Recording the request for real,
+rather than faking instant fulfillment or omitting the feature entirely,
+was judged the most honest middle ground. `docs/PRIVACY_DATA_FLOW.md`
+documents the manual runbook step this implies for now.
+
+## 2026-08-31 — RevenueCat webhook payload could not be verified live
+
+**Decision:** `supabase/functions/revenuecat-webhook/index.ts` is written
+against RevenueCat's long-documented webhook shape
+(`event.{type, app_user_id, product_id, entitlement_ids,
+expiration_at_ms, period_type}`) and shared-secret `Authorization` header,
+based on a web search summary — this sandbox's network egress policy
+blocked a direct fetch of revenuecat.com's own docs pages to confirm the
+exact current field names byte-for-byte. Flagged in the function's own
+top-of-file comment as something to re-verify against
+https://www.revenuecat.com/docs/integrations/webhooks before relying on
+it in production, rather than presenting it as verified.
+
 (Further entries appended as work proceeds through later phases.)

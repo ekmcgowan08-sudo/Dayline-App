@@ -4,7 +4,9 @@ import { router, useFocusEffect } from 'expo-router';
 import { spacing } from '../../../constants/theme';
 import { GROUP_LIMITS } from '../../../constants/brand';
 import { useAuthStore } from '../../../state/auth-store';
+import { useSubscriptionStore } from '../../../state/subscription-store';
 import { listMyGroups, type GroupWithRole } from '../../../services/groups';
+import { Banner } from '../../../components/ui/Banner';
 import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
 import { EmptyState } from '../../../components/ui/EmptyState';
@@ -16,6 +18,7 @@ import { useTheme } from '../../../hooks/use-theme';
 export default function GroupsList() {
   const theme = useTheme();
   const userId = useAuthStore((s) => s.session?.user.id);
+  const groupLimit = useSubscriptionStore((s) => s.limits().maxActiveGroups);
   const [groups, setGroups] = useState<GroupWithRole[] | null>(null);
 
   useFocusEffect(
@@ -27,6 +30,11 @@ export default function GroupsList() {
 
   if (groups === null) return <LoadingState label="Loading groups" />;
 
+  // Fails safe: if the entitlement check itself is unavailable, `limits()`
+  // already defaults to the free tier (see subscription-store.ts), so this
+  // never accidentally under-restricts.
+  const atGroupLimit = groups.length >= groupLimit;
+
   return (
     <Screen padded={false}>
       <View style={{ padding: spacing.xl, paddingBottom: spacing.md, gap: spacing.xxs }}>
@@ -35,6 +43,15 @@ export default function GroupsList() {
           Small, private circles — up to {GROUP_LIMITS.maxActiveMembers} people. Nobody outside your group ever sees it.
         </Text>
       </View>
+
+      {atGroupLimit ? (
+        <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.sm }}>
+          <Banner
+            kind="info"
+            message={`You're in ${groupLimit} of ${groupLimit} groups your plan allows. Upgrade to Plus in Settings to join more.`}
+          />
+        </View>
+      ) : null}
 
       <FlatList
         data={groups}
@@ -57,8 +74,14 @@ export default function GroupsList() {
         )}
         ListFooterComponent={
           <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-            <Button label="Create group" onPress={() => router.push('/(app)/groups/create')} fullWidth={false} />
-            <Button label="Join with code" variant="secondary" onPress={() => router.push('/(app)/groups/join')} fullWidth={false} />
+            <Button label="Create group" onPress={() => router.push('/(app)/groups/create')} fullWidth={false} disabled={atGroupLimit} />
+            <Button
+              label="Join with code"
+              variant="secondary"
+              onPress={() => router.push('/(app)/groups/join')}
+              fullWidth={false}
+              disabled={atGroupLimit}
+            />
           </View>
         }
       />

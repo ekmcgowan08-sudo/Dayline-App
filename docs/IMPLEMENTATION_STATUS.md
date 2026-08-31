@@ -175,11 +175,62 @@ product spec.
 
 ## Phase 5 — Memories, exports, settings, deletion, privacy
 
-Status: not started.
+- ✅ **Memories**: "On this day" (7/30/365-day, via `memories_on_this_day()`
+  RPC — pure date math over the user's own ready montages, no facial
+  recognition or content profiling), combined personal + group montage
+  archive with a text search (matches date or group name) and a
+  personal/group filter, personal-montage deletion
+  (`delete_own_personal_montage` RPC), empty states.
+- ✅ **Settings**: hub + profile edit (name/photo), capture-schedule editor
+  (mirrors onboarding, including the custom-times editor — not a stub),
+  memory-notification toggle, legal-document viewer (Terms/Privacy/
+  Community Rules — see below), support/FAQ screen with a real `mailto:`
+  link, blocked-people management (list + unblock).
+- ✅ **Data export & account deletion — genuinely destructive, not a soft
+  hide.** `request_account_deletion()` records intent; the `delete-account`
+  Edge Function removes the user's clip and personal-montage storage
+  objects, then calls `auth.admin.deleteUser()`, which cascades through
+  every FK'd table (profiles, clips, capture_slots, group_members,
+  group_contributions, reactions, comments, blocks, subscriptions,
+  acceptance_records, device_push_tokens, notification_preferences). A
+  standalone `account_deletion_audit` row (no FK to the now-deleted user)
+  is written afterward so deletion stays provable without retaining any
+  of the deleted person's data. Data export is a real, audited *request*
+  (`data_export_requests` table + RPC); **fulfillment (actually compiling
+  and emailing an archive) is a documented manual step for this beta**,
+  not automated — no email-sending infrastructure exists in this build.
+  This gap is stated plainly, not hidden.
+- 🚫 Not run against a live Supabase project (same constraint as Phase 3's
+  Edge Functions — reviewed and typechecked, not exercised against real
+  storage/auth calls).
 
 ## Phase 6 — Subscriptions & optional AI features
 
-Status: not started.
+- ✅ **Subscriptions**: RevenueCat (`react-native-purchases`) wired for
+  real use once platform API keys exist (`configureRevenueCatIfLive`,
+  offerings/purchase/restore); when no key is configured the app runs
+  entirely on a local mock adapter that is visually and textually marked
+  "Development mode... simulated locally and never charge anything" and
+  never writes to the real `subscriptions` table (which the client has no
+  write access to at all — see the S6 RLS proof). `revenuecat-webhook`
+  Edge Function is the only writer, mapping RevenueCat's documented event
+  shape to the `subscriptions` row.
+  **Caveat**: this sandbox's network access could not reach
+  revenuecat.com to double-check the current exact webhook field names/
+  auth convention against live docs — flagged directly in the function's
+  own comment header, not silently assumed correct.
+  A real feature gate (group-count limit, fails safe to the free tier on
+  any error) is wired on the Groups screen as a working example other
+  gates can follow.
+- ✅ **AI captions**: provider-abstraction Edge Function (`transcribe`)
+  behind an explicit per-user consent record and an app-wide feature flag
+  (off by default). The only *exercised* provider is a deterministic mock
+  (no network call, no data leaves Supabase) — the real OpenAI-Whisper-
+  shaped provider is implemented and reviewed, not a stub, but untested
+  without a live API key. Settings screen lets a user toggle consent and
+  run an end-to-end test against their own most recent clip.
+- 🚫 Not run against a live Supabase project (consistent with the rest of
+  the Edge Functions in this build).
 
 ## Phase 7 — Security hardening, tests, CI, performance, a11y
 

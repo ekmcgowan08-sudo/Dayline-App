@@ -1,6 +1,9 @@
+import { useEffect } from 'react';
 import { Redirect, Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../state/auth-store';
+import { useSubscriptionStore } from '../../state/subscription-store';
+import { configureRevenueCatIfLive } from '../../services/subscriptions';
 import { useTheme } from '../../hooks/use-theme';
 
 export default function AppLayout() {
@@ -8,6 +11,13 @@ export default function AppLayout() {
   const session = useAuthStore((s) => s.session);
   const profile = useAuthStore((s) => s.profile);
   const profileLoaded = useAuthStore((s) => s.profileLoaded);
+  const refreshEntitlement = useSubscriptionStore((s) => s.refresh);
+
+  useEffect(() => {
+    if (!session) return;
+    configureRevenueCatIfLive(session.user.id);
+    refreshEntitlement();
+  }, [session, refreshEntitlement]);
 
   if (!session) return <Redirect href="/(auth)/welcome" />;
   if (profileLoaded && !profile?.onboarding_completed_at) return <Redirect href="/(onboarding)/purpose" />;
