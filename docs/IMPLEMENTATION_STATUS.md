@@ -502,9 +502,17 @@ log) to turn Actions into the actual deployment mechanism for everything
 that needs real credentials.
 
 - ✅ `ci.yml` trigger widened to `push: branches: [main, 'claude/**']` +
-  `workflow_dispatch`, and a PR opened specifically to fire a first real
-  run — see the PR for actual (not assumed) pass/fail results on every
-  job, including the Docker image build.
+  `workflow_dispatch` — the push that added this trigger fired the very
+  first real CI run in the project's history (run 33411588286, 2026-08-31
+  16:00 UTC). **All 7 jobs passed**, each confirmed individually via the
+  GitHub Actions API, not just the run's overall conclusion: mobile
+  (typecheck/lint/test), worker (typecheck/build/test against real
+  ffmpeg), **the Docker image build** (the one thing this sandbox
+  couldn't do), the full SQL suite against a real `postgres:16` service
+  container (migrations + all 5 test files), Deno typecheck on every Edge
+  Function, `npm audit --audit-level=high` on both packages, and
+  `gitleaks`. This is real, external, first-party confirmation of
+  everything this repo's own local testing could only approximate.
 - ✅ `deploy-supabase.yml` (`workflow_dispatch`): links a real Supabase
   project, runs every migration, deploys all 7 Edge Functions, sets their
   secrets — from 4 repo secrets instead of ~10 manual CLI commands.
