@@ -1,0 +1,74 @@
+name: EAS Build (cloud native build — no local Xcode/Android Studio needed)
+
+# Manual only. Runs the actual native build on Expo's own cloud
+# infrastructure — the point is that NEITHER this GitHub Actions runner
+# NOR your own machine needs Xcode, Android Studio, or Docker; EAS does
+# the compiling. Requires two repo secrets:
+#
+#   EXPO_TOKEN      — expo.dev account → Access Tokens (create one)
+#   MOBILE_ENV_FILE — paste the FULL contents of a filled-in mobile/.env
+#                     (see mobile/.env.example) as one multi-line secret
+#
+# The default profile is "simulator" (mobile/eas.json) — an iOS build
+# that needs no Apple Developer Program enrollment at all (no code
+# signing for the Simulator) and an Android internal APK that installs
+# directly, no Play Console account needed either. Use "development" for
+# a real-device dev-client build once you have signing credentials set up
+# (`eas credentials`), and "production" only once store accounts exist.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Target platform
+        type: choice
+        options: [all, ios, android]
+        default: all
+      profile:
+        description: eas.json build profile
+        type: choice
+        options: [simulator, development, preview, production]
+        default: simulator
+
+jobs:
+  build:
+    name: eas build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Write mobile/.env from secret
+        env:
+          MOBILE_ENV_FILE: ${{ secrets.MOBILE_ENV_FILE }}
+        run: printf '%s\n' "$MOBILE_ENV_FILE" > .env
+
+      - run: npm ci
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: eas build
+        run: |
+          eas build \
+            --platform "${{ inputs.platform }}" \
+            --profile "${{ inputs.profile }}" \
+            --non-interactive \
+            --wait
+
+      - name: Summary
+        run: |
+          echo "### EAS build finished :white_check_mark:" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download links are on your expo.dev project's Builds page." >> "$GITHUB_STEP_SUMMARY"
+          echo "- **simulator** profile: drag the .app/.tar.gz onto a booted iOS Simulator, or \`eas build:run\` from any machine with Xcode." >> "$GITHUB_STEP_SUMMARY"
+          echo "- **development/preview** Android: download the .apk and install directly on a device or emulator." >> "$GITHUB_STEP_SUMMARY"

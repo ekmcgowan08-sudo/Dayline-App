@@ -1,5 +1,14 @@
 # Deployment
 
+## The fast path: GitHub Actions
+
+Before typing any command below by hand, check `docs/OWNER_ACTIONS_REQUIRED.md`'s
+"The fast path" section — `deploy-supabase.yml`, `eas-build.yml`, and
+`verify-sentry.yml` in `.github/workflows/` automate everything here once
+you've created the relevant accounts and pasted their tokens into this
+repo's GitHub secrets. Everything below is the manual equivalent, kept as
+reference.
+
 ## Local development (no production credentials needed)
 
 ```bash

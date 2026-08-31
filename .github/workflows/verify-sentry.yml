@@ -1,0 +1,95 @@
+name: Verify Sentry round-trip
+
+# Manual only. Confirms an event genuinely reaches your Sentry project —
+# the one piece of the crash-reporting integration
+# (mobile/src/lib/crashReporting.ts) that no automated test in this repo
+# could verify, since it requires a real DSN and real network access to
+# sentry.io. Sends one synthetic event directly to Sentry's ingest API
+# (the same protocol the SDK itself uses) and fails the job if Sentry
+# doesn't accept it — so a green run here is a genuine confirmation, not
+# just "the request didn't error."
+#
+# Requires one repo secret: SENTRY_DSN (the same value you'd put in
+# mobile/.env as EXPO_PUBLIC_SENTRY_DSN).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Send a synthetic event and confirm Sentry accepts it
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send test event to Sentry
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          python3 - <<'PYEOF'
+          import json
+          import os
+          import re
+          import sys
+          import urllib.request
+          import urllib.error
+          import uuid
+          from datetime import datetime, timezone
+
+          dsn = os.environ.get("SENTRY_DSN", "").strip()
+          if not dsn:
+              print("::error::SENTRY_DSN secret is not set.")
+              sys.exit(1)
+
+          m = re.match(r"^https://([^@]+)@([^/]+)/(.+)$", dsn)
+          if not m:
+              print("::error::SENTRY_DSN doesn't look like a valid DSN (expected https://<key>@<host>/<project_id>).")
+              sys.exit(1)
+          public_key, host, project_id = m.groups()
+
+          event_id = uuid.uuid4().hex
+          payload = {
+              "event_id": event_id,
+              "timestamp": datetime.now(timezone.utc).isoformat(),
+              "platform": "other",
+              "level": "info",
+              "message": {"message": "Dayline CI: Sentry round-trip verification"},
+              "tags": {"source": "github-actions", "workflow": "verify-sentry"},
+          }
+          body = json.dumps(payload).encode("utf-8")
+
+          auth = (
+              f"Sentry sentry_version=7, sentry_client=dayline-ci/1.0, "
+              f"sentry_key={public_key}"
+          )
+          req = urllib.request.Request(
+              f"https://{host}/api/{project_id}/store/",
+              data=body,
+              method="POST",
+              headers={
+                  "Content-Type": "application/json",
+                  "X-Sentry-Auth": auth,
+              },
+          )
+
+          try:
+              with urllib.request.urlopen(req, timeout=15) as resp:
+                  resp_body = resp.read().decode("utf-8", "replace")
+                  status = resp.status
+          except urllib.error.HTTPError as e:
+              print(f"::error::Sentry rejected the event: HTTP {e.code} — {e.read().decode('utf-8', 'replace')}")
+              sys.exit(1)
+          except Exception as e:
+              print(f"::error::Could not reach Sentry: {e}")
+              sys.exit(1)
+
+          if status != 200:
+              print(f"::error::Unexpected status {status} from Sentry: {resp_body}")
+              sys.exit(1)
+
+          print(f"Sentry accepted the event (event_id={event_id}).")
+          print(f"Check your project's Issues stream for 'Dayline CI: Sentry round-trip verification'.")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("### Sentry round-trip confirmed :white_check_mark:\n")
+              f.write(f"- event_id: `{event_id}`\n")
+              f.write(f"- project host: `{host}`\n")
+              f.write("Look for **\"Dayline CI: Sentry round-trip verification\"** in your project's Issues stream.\n")
+          PYEOF

@@ -1,0 +1,77 @@
+name: Deploy Supabase (migrations + Edge Functions + secrets)
+
+# Manual only — this applies real migrations and deploys real functions to
+# whatever project SUPABASE_PROJECT_REF names, so it never runs on a plain
+# push. Requires four repo secrets (Settings → Secrets and variables →
+# Actions), all from a Supabase project you've already created at
+# supabase.com — this workflow only automates what docs/DEPLOYMENT.md
+# otherwise has you type by hand from your own machine:
+#
+#   SUPABASE_ACCESS_TOKEN  — supabase.com/dashboard/account/tokens
+#   SUPABASE_PROJECT_REF   — the project's ref id (in its dashboard URL)
+#   SUPABASE_DB_PASSWORD   — the database password you set at project creation
+#   SUPABASE_FUNCTIONS_ENV — paste the FULL contents of a filled-in
+#                            supabase/functions/.env (see .env.example in
+#                            that directory) as one multi-line secret
+#
+# Migrations are additive-by-design (if not exists / create or replace
+# throughout — see docs/DECISIONS.md), so re-running this is safe.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Link, migrate, deploy functions, set secrets
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+
+      - name: Apply every migration in supabase/migrations/
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push
+
+      - name: Deploy every Edge Function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          for dir in supabase/functions/*/; do
+            fn="$(basename "$dir")"
+            [ "$fn" = "_shared" ] && continue
+            echo "--- deploying $fn ---"
+            supabase functions deploy "$fn" --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+          done
+
+      - name: Set function secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          FUNCTIONS_ENV: ${{ secrets.SUPABASE_FUNCTIONS_ENV }}
+        run: |
+          set -euo pipefail
+          env_file="$(mktemp)"
+          trap 'shred -u "$env_file" 2>/dev/null || rm -f "$env_file"' EXIT
+          printf '%s\n' "$FUNCTIONS_ENV" > "$env_file"
+          supabase secrets set --env-file "$env_file" --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+
+      - name: Summary
+        run: |
+          echo "### Supabase deploy complete :white_check_mark:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Migrations applied via \`supabase db push\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- All Edge Functions deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Function secrets set from SUPABASE_FUNCTIONS_ENV" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Still needed (docs/DEPLOYMENT.md): enable pg_cron/pg_net and run the two \`cron.schedule(...)\` calls in the dashboard SQL editor — that part has no CLI/API equivalent." >> "$GITHUB_STEP_SUMMARY"

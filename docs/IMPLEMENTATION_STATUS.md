@@ -490,24 +490,65 @@ Previously listed under "Not required, but worth knowing about" in
 - 🚫 Not verified against a live Sentry project (no DSN, no network
   egress to sentry.io in this sandbox) — see `docs/OWNER_ACTIONS_REQUIRED.md`.
 
+## Phase 19 — CI actually wired up; deploy-by-secret GitHub Actions workflows
+
+`.github/workflows/ci.yml` existed since Phase 7 but had **never run** —
+its trigger was `push: branches: [main]` and every phase of this build
+happened on a feature branch that was never merged. Fixed, and used the
+fact that GitHub Actions runners aren't behind this sandbox's egress
+policy (which explicitly denies supabase.com, sentry.io, expo.dev, and
+Docker Hub's blob CDN — confirmed directly via the proxy's own status
+log) to turn Actions into the actual deployment mechanism for everything
+that needs real credentials.
+
+- ✅ `ci.yml` trigger widened to `push: branches: [main, 'claude/**']` +
+  `workflow_dispatch`, and a PR opened specifically to fire a first real
+  run — see the PR for actual (not assumed) pass/fail results on every
+  job, including the Docker image build.
+- ✅ `deploy-supabase.yml` (`workflow_dispatch`): links a real Supabase
+  project, runs every migration, deploys all 7 Edge Functions, sets their
+  secrets — from 4 repo secrets instead of ~10 manual CLI commands.
+- ✅ `eas-build.yml` (`workflow_dispatch`): builds on Expo's cloud
+  infrastructure — no Xcode/Android Studio/Docker needed on the runner
+  *or* the user's machine. New `simulator` profile in `mobile/eas.json`
+  (`ios.simulator: true`) needs no Apple Developer Program enrollment.
+- ✅ `verify-sentry.yml` (`workflow_dispatch`): posts a real event to
+  Sentry's classic ingest API and fails unless Sentry returns 200 — a
+  genuine round-trip confirmation, not a request-didn't-error check.
+- ✅ **Auto-verified**: all four workflow YAML files parsed with
+  `python3 -c "import yaml; yaml.safe_load(...)"`. `verify-sentry.yml`'s
+  embedded Python was extracted and run standalone against a well-formed
+  fake DSN (correctly fails on the network call with this sandbox's own
+  policy-denial error — the exact failure this workflow exists to
+  escape), a malformed DSN, and an empty DSN (both give the correct
+  validation error) before being trusted to run unattended in CI.
+- 🚫 None of the three deploy workflows has actually been run against
+  real accounts yet — that step needs the account credentials only an
+  owner can provide (see `docs/OWNER_ACTIONS_REQUIRED.md`'s "fast path"
+  section for exactly which secrets each one needs).
+
 ---
 
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:
 
-- **No Docker daemon** in this sandbox (`docker info` fails) — the render
-  worker's Dockerfile is written but the image was not built/run here. Worker
-  logic itself was exercised directly via Node + a locally `apt`-installed
-  `ffmpeg` binary against fixture clips.
-- **No Supabase CLI network/Docker stack** confirmed runnable here (no
-  Docker daemon). Migrations were instead verified against a real local
+- **Docker Hub is policy-blocked, not "no Docker daemon"** — corrected in
+  Phase 19 after actually checking: `dockerd` starts and runs fine in
+  this sandbox, but its egress proxy explicitly denies Docker Hub's blob
+  CDN (`production.cloudfront.docker.com`), so a build gets through
+  manifest resolution and fails on the base-image layer pull. `ci.yml`'s
+  `worker-docker-build` job builds the real image on GitHub Actions
+  instead, which isn't behind that policy — see Phase 19.
+- **No Supabase CLI network/Docker stack** confirmed runnable here (the
+  same policy denies supabase.com directly, independent of the Docker
+  question above). Migrations were instead verified against a real local
   PostgreSQL 16 (`apt install postgresql`) with a hand-built stand-in for
   Supabase's `auth`/`storage` schemas — see `supabase/tests/` and the
   "Schema hardened and proven" entry in `docs/DECISIONS.md`. Whether
-  `supabase start` itself succeeds in a Docker-capable environment is
-  expected to be a smooth run (the SQL is already proven against real
-  Postgres), but is untested here.
+  `supabase start` itself succeeds in a Docker-capable, non-policy-restricted
+  environment is expected to be a smooth run (the SQL is already proven
+  against real Postgres), but is untested here.
 - **No physical iOS/Android device or macOS**, so iOS builds and device-only
   APIs (push token registration on real hardware, camera on real hardware,
   App Store builds) cannot be verified beyond static/simulator checks where a

@@ -492,4 +492,77 @@ same way AsyncStorage already was — the real SDK leaves native-bridging
 timers open that Jest can't tear down, a known characteristic of the RN
 SDK in test environments, unrelated to this app's own code.
 
+## 2026-08-31 — CI never actually ran; wired it up and added deploy-by-secret workflows
+
+The user asked to move everything this sandbox genuinely can't build (a
+live Supabase project, a Sentry round-trip, the worker's Docker image,
+device/simulator testing) to an environment that can, and to build
+whatever's actually buildable here first.
+
+**What was actually true, checked directly rather than assumed:** this
+sandbox's egress proxy explicitly denies `supabase.com`, `api.supabase.com`,
+`sentry.io`, `expo.dev`, and `api.expo.dev` at the gateway (confirmed via
+`curl` and the proxy's own status endpoint — `recentRelayFailures` shows
+`gateway answered 403` for each, the organization-policy-denial class the
+proxy's README says to report rather than route around). Docker itself
+was **not** the blocker previously assumed: `dockerd` starts and runs
+fine here — the actual failure is that Docker Hub's blob CDN
+(`production.cloudfront.docker.com`) is behind the same policy denial, so
+an image can be built once the daemon has proxy env vars, right up until
+the base-image layer pull. This corrects `docs/OWNER_ACTIONS_REQUIRED.md`'s
+prior "no Docker daemon" framing (item 15/"Docker-capable environment")
+to the more precise "Docker works, registry pulls are policy-blocked
+here" — a real distinction, since it's exactly what a different sandbox
+policy or a non-sandboxed environment would fix, whereas "no daemon"
+implied it never could.
+
+**GitHub itself was reachable the whole time** (`api.github.com` returns
+200; only `github.com` bare and the Docker/Supabase/Sentry/Expo hosts are
+denied). More importantly, this repo's `.github/workflows/ci.yml` had
+`total_count: 0` runs ever — not because CI was broken, but because its
+trigger was `push: branches: [main]` and every phase of this build has
+happened on `claude/dayline-mobile-app-mizzky`, which was never merged.
+The Docker build job, the real-Postgres RLS suite, the Deno typecheck —
+all of it has been sitting there correct and unrun since the first
+8-phase pass. Fixed by widening the trigger to include `claude/**` and
+adding `workflow_dispatch`, and by opening a PR to `main` (see the PR
+this commit is attached to) specifically to fire the `pull_request:`
+trigger and get a first real run.
+
+**Three new `workflow_dispatch` workflows turn GitHub Actions into the
+"space that can build it all"** for the pieces that need real credentials
+this sandbox can't hold anyway — the point isn't that GitHub Actions is a
+generically better environment, it's that account creation (Supabase,
+Expo, Sentry — identity + billing) is unavoidably a human step no matter
+which computer runs the commands, so the only leverage available is
+collapsing everything *after* that step into one click:
+
+- `deploy-supabase.yml` — links the project, runs every migration,
+  deploys all 7 functions, sets their secrets from one pasted `.env`
+  blob (`SUPABASE_FUNCTIONS_ENV`), rather than the user typing ~10 CLI
+  commands from `docs/DEPLOYMENT.md` by hand.
+- `eas-build.yml` — builds on Expo's own cloud infrastructure, so
+  *neither* the GitHub runner *nor* the user's own machine needs Xcode,
+  Android Studio, or Docker. Added a new `simulator` build profile to
+  `mobile/eas.json` (`ios.simulator: true`) specifically so the default
+  run needs **no Apple Developer Program enrollment** — that $99/yr is
+  still required for a real-device/App-Store build, but not to get
+  something runnable today.
+- `verify-sentry.yml` — posts a real event straight to Sentry's classic
+  ingest API (`POST /api/<project>/store/` with the DSN's public key in
+  `X-Sentry-Auth`) and fails the job unless Sentry actually returns 200.
+  This is a genuine round-trip confirmation via the same protocol the SDK
+  itself uses, not a check that the request merely didn't error — tested
+  locally against a fake DSN (correctly fails with the exact
+  policy-denial error this workflow exists to escape) and against
+  malformed/empty DSN inputs (correct validation errors) before being
+  trusted to run for real in Actions.
+
+All four workflow YAML files were syntax-validated
+(`python3 -c "import yaml; yaml.safe_load(...)"`), and the Python
+embedded in `verify-sentry.yml` was extracted and run standalone against
+three inputs (a well-formed fake DSN, a malformed string, an empty
+value) to prove its parsing/error-handling logic before pushing it as
+something that will run unattended in CI.
+
 (Further entries appended as work proceeds through later phases.)
