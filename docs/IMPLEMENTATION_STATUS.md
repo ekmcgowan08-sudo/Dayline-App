@@ -669,6 +669,8 @@ Closed the last concrete Milestone 3 item.
 - 🚫 No poster-frame thumbnails (dots + text labels only) — extracting a
   frame from the rendered video needs worker/storage changes, left for
   a future pass (see `docs/ROADMAP.md`).
+- ✅ **Confirmed on real CI**: run 33439576799 (the 7th consecutive
+  clean run), all 7 jobs passed, checked individually per job.
 
 ---
 
