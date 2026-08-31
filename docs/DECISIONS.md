@@ -361,4 +361,46 @@ public`, which resolves every plugin without error — real evidence the
 config is valid, not just visually reviewed. Added `mobile/eas.json` with
 development/preview/production build profiles.
 
+## 2026-08-31 — Continuation pass: closed three previously-flagged gaps
+
+After the initial 8-phase build, the user asked to keep going. Rather
+than invent new scope, this pass closed the three most concrete gaps the
+project's own documentation had already flagged as real (not
+hypothetical) shortfalls: server-side push delivery, raw-clip storage
+lifecycle, and un-enforced entitlement limits. Each is detailed in its
+own `docs/IMPLEMENTATION_STATUS.md` phase (9, 10, 11) and
+`docs/DECISIONS.md` gets the "why," summarized here:
+
+- **Push delivery reads existing state, never recomputes it.**
+  `send-capture-reminders` deliberately queries `capture_slots` (already
+  written by the client) instead of reimplementing schedule math
+  server-side — a second implementation of the timezone/DST logic in
+  `mobile/src/services/schedule.ts` would be a maintenance liability and
+  a likely source of subtle drift, for no real benefit.
+- **Duplicate suppression is honest about its limits.** Neither iOS nor
+  Android gives an app a delivery receipt for a local notification, so
+  "prevent duplicate local and server notifications" (a literal product
+  requirement) cannot be made airtight — documented as such in both the
+  Edge Function and the client dedup module, with a concrete mitigation
+  (grace period + client-side `captureSlotId` suppression) rather than
+  either skipping the requirement or overclaiming a guarantee that isn't
+  achievable.
+- **Clip storage lifecycle is two decoupled steps, not one.** Marking a
+  clip `used` (fast, synchronous, inside the render job) is separated
+  from actually deleting its storage object (a separate scheduled
+  function) specifically so a transient storage error can never block an
+  otherwise-successful montage render from completing.
+- **Entitlement enforcement duplicates a constant across Postgres and TS,
+  on purpose, with both sides commented.** The alternative (a shared
+  source of truth the client fetches at runtime) is a better long-term
+  design but a larger change than this pass's scope — documented as a
+  known, deliberate tradeoff rather than either silently duplicating the
+  number with no cross-reference or over-engineering a config-fetching
+  layer for a single integer.
+- **Every new capability shipped with a real, run test**, not just
+  review: `notificationDedup.test.ts` (4 tests, mobile), a re-verified
+  worker build, and `entitlement_archive.test.sql` (against real
+  Postgres, proving both the free-tier restriction and the plus-tier
+  unlock). Total automated test count: 16 mobile + 7 worker + 14 SQL = 37.
+
 (Further entries appended as work proceeds through later phases.)

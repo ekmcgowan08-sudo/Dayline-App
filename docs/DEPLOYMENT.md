@@ -25,6 +25,8 @@ supabase functions deploy get-montage-url
 supabase functions deploy delete-account
 supabase functions deploy revenuecat-webhook --no-verify-jwt
 supabase functions deploy transcribe
+supabase functions deploy send-capture-reminders --no-verify-jwt
+supabase functions deploy purge-used-clips --no-verify-jwt
 supabase secrets set --env-file functions/.env   # after filling in real values
 
 # 5. Render worker
@@ -40,6 +42,72 @@ any production accounts — see `docs/TESTING.md` for why that specific
 combination (real `supabase start` + this repo's migrations) wasn't
 exercised in this development sandbox (no Docker daemon here), even
 though the SQL itself is proven against real Postgres.
+
+### Server push scheduling (one-time setup after the first deploy)
+
+Local notifications (scheduled by the app itself) are the primary
+reminder delivery path and work with zero server setup. The
+`send-capture-reminders` function is a *backup* path for when a reminder
+was scheduled but the app was killed/reinstalled before it could fire —
+it reads the same `capture_slots` rows the client already writes, so it
+never recomputes (and risks drifting from) the timezone/DST-aware
+schedule logic. To enable it:
+
+1. In the Supabase dashboard → Database → Extensions, enable `pg_cron`
+   and `pg_net` (both ship with every project, just not enabled by
+   default).
+2. Run once, in the SQL editor, with your real project ref and a service
+   role key (or better, a key scoped only to invoke this function if your
+   plan supports it):
+   ```sql
+   select cron.schedule(
+     'send-capture-reminders',
+     '*/5 * * * *',
+     $$
+     select net.http_post(
+       url := 'https://<your-project-ref>.supabase.co/functions/v1/send-capture-reminders',
+       headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>', 'Content-Type', 'application/json'),
+       body := '{}'::jsonb
+     );
+     $$
+   );
+   ```
+   (`<CRON_SECRET>` must match the `CRON_SECRET` value set in the
+   function's own secrets — see `supabase/functions/.env.example`.)
+3. That's it — the function is idempotent (`capture_slots.notified_at`)
+   and self-limiting (a 15-minute stale window, so a cron outage doesn't
+   produce a backlog of late pushes), so there's no further maintenance.
+
+Without this setup, the app still works correctly — reminders just rely
+solely on the local-notification path, same as before this was added.
+
+### Raw-clip storage purge scheduling (recommended before real usage)
+
+`purge-used-clips` frees the storage cost of raw clips once they've done
+their job (see `docs/COSTS.md`'s "expire raw clips after rendering"
+lever) — it removes the storage object for clips the render worker
+already marked `status = 'used'`, past `RAW_CLIP_RETENTION_DAYS` (default
+7). The database row and `montage_clips` history are kept either way,
+just the video bytes are freed. Same `pg_cron` mechanism as above, run
+once daily is plenty:
+
+```sql
+select cron.schedule(
+  'purge-used-clips',
+  '0 4 * * *',   -- once daily at 4am UTC
+  $$
+  select net.http_post(
+    url := 'https://<your-project-ref>.supabase.co/functions/v1/purge-used-clips',
+    headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>', 'Content-Type', 'application/json'),
+    body := '{}'::jsonb
+  );
+  $$
+);
+```
+
+Without this, raw clips simply accumulate in storage indefinitely until
+the user deletes them individually or deletes their account — functional,
+just more expensive at scale than necessary.
 
 ## Production deployment runbook
 

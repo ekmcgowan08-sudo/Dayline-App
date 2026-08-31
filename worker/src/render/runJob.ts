@@ -99,6 +99,32 @@ export async function runJob(job: MontageJob): Promise<void> {
       .eq('id', job.id);
     if (updateError) throw new Error(`failed to finalize montage row: ${updateError.message}`);
 
+    // Storage cost control (see docs/COSTS.md): once a clip has been
+    // incorporated into its OWNER's OWN personal montage, the raw source
+    // is no longer needed for anything this app does with it — mark it
+    // 'used' so the scheduled purge-used-clips job can later free its
+    // storage object while keeping the row (and montage_clips history)
+    // intact. Deliberately NOT done for group montages: a group
+    // contribution doesn't mean the owner's own personal montage (which
+    // may not exist yet) is done with that clip.
+    if (job.kind === 'personal' && montageClipsRows.length > 0) {
+      const { error: markUsedError } = await supabaseAdmin
+        .from('clips')
+        .update({ status: 'used' })
+        .in(
+          'id',
+          montageClipsRows.map((r) => r.clip_id)
+        )
+        .eq('status', 'uploaded'); // never downgrade a clip some other flow already moved on from
+      if (markUsedError) {
+        // Non-fatal: the montage already succeeded and is what the user
+        // sees. Worst case this batch of clips is picked up by a later
+        // job or lingers un-purged a bit longer — not worth failing an
+        // otherwise-successful render over.
+        logger.warn('failed to mark clips used (non-fatal)', { montageId: job.id, error: markUsedError.message });
+      }
+    }
+
     logger.info('montage rendered', {
       montageId: job.id,
       clipCount: montageClipsRows.length,

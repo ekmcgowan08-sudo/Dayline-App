@@ -101,12 +101,12 @@ product spec.
   (`expo-video-thumbnails` against a short-lived signed URL, cached),
   manual "Capture a moment" always available, no shame-based copy or
   public metrics.
-- 🟡 **Server-side push notification delivery**: device token registration
-  code exists (`registerPushToken`) and is called after schedule setup,
-  but nothing in this repo yet *sends* a push (that requires either a
-  scheduled Edge Function or a third-party pusher hitting Expo's push
-  API) — local notifications are the only reminder path that actually
-  fires today. Tracked as a real gap, not glossed over.
+- ✅ **Server-side push notification delivery** (added in a later session
+  pass, see Phase 9 below): `send-capture-reminders` Edge Function reads
+  the same `capture_slots` rows the client writes and sends Expo pushes
+  for slots that came due without a local notification having handled
+  them, with a duplicate-suppression scheme between the two delivery
+  paths — see Phase 9.
 
 ## Phase 3 — Personal montage rendering & reveal
 
@@ -308,6 +308,94 @@ product spec.
 - ✅ `docs/OWNER_ACTIONS_REQUIRED.md` consolidates every remaining
   nondelegable item into one checklist, cross-referenced from
   `LAUNCH_CHECKLIST.md`.
+
+## Phase 9 — Server-side push notification delivery (post-launch-package pass)
+
+Closed the gap flagged at the end of Phase 2/8: local notifications were
+the only reminder path that actually fired.
+
+- ✅ `send-capture-reminders` Edge Function reads the existing
+  `capture_slots` rows (never recomputes the schedule server-side, so it
+  can't drift from `mobile/src/services/schedule.ts`'s timezone/DST
+  logic), sends Expo pushes for due-and-unnotified slots, prunes push
+  tokens Expo reports as `DeviceNotRegistered`, and is idempotent
+  (`capture_slots.notified_at`) and self-bounding (a 15-minute stale
+  window so a cron outage never produces a backlog of late pushes).
+- ✅ **Real duplicate-suppression between local and server delivery**,
+  not just idempotency within each path individually: both paths tag
+  their notification with the same `captureSlotId`; the client
+  (`mobile/src/lib/notificationDedup.ts`, wired into the notification
+  handler in `mobile/src/services/notifications.ts`) suppresses showing
+  a second notification for a slot it already displayed one for. This is
+  honestly documented as *not* a guaranteed-zero-duplicates system (no
+  delivery receipt exists for a local notification on either platform) —
+  a 3-minute server-side grace period plus this client-side suppression
+  meaningfully reduces duplicates rather than claiming to eliminate them.
+  **Auto-verified**: `mobile/src/lib/__tests__/notificationDedup.test.ts`
+  (4 tests) proves the suppression logic itself, including history
+  bounding.
+- ✅ Scheduling is via `pg_cron`/`pg_net` (both ship with every Supabase
+  project). The migration checks for their availability and no-ops
+  safely with an instructional `NOTICE` if unavailable (true in this
+  session's local-Postgres-only stub) rather than failing — the actual
+  `cron.schedule(...)` call needs a real project's URL + secret filled in
+  once, documented step-by-step in `docs/DEPLOYMENT.md` and flagged in
+  `docs/OWNER_ACTIONS_REQUIRED.md`.
+- 🚫 Not run against a live Supabase project or a real device (same
+  constraint as every other Edge Function in this build).
+
+## Phase 10 — Clip/storage lifecycle after render (cost control)
+
+Closed `COSTS.md`'s top-listed-but-previously-unimplemented lever
+("aggressively expire raw clips after the montage is rendered").
+
+- ✅ The render worker now marks a clip `status = 'used'` once it's been
+  incorporated into its **owner's own personal** montage (deliberately
+  not done for group-contributed clips — the owner's personal montage for
+  that clip may not exist yet). Failure to mark is logged and treated as
+  non-fatal — never blocks an otherwise-successful render.
+- ✅ `purge-used-clips` Edge Function removes the storage object (not the
+  database row — `montage_clips` history stays intact) for `used` clips
+  past a configurable retention window (`RAW_CLIP_RETENTION_DAYS`,
+  default 7 days), scheduled the same way as Phase 9's function.
+- 🚫 Not run against a live Supabase project. The worker-side "mark used"
+  logic is covered by the existing worker typecheck/build but has no
+  dedicated unit test (it's a small, reviewed, non-fatal-on-error
+  Supabase side effect — see `worker/src/render/runJob.ts`; adding a
+  mocked-Supabase test harness for the worker was judged lower value than
+  the ffmpeg-pipeline tests that already exist, given this session's
+  remaining scope).
+
+## Phase 11 — Server-enforced entitlement limits (memory archive)
+
+Closed the gap explicitly called out in Phase 6/8:
+`ENTITLEMENT_LIMITS.free.memoryArchiveDays` existed only as a documented
+client-side hypothesis with nothing actually enforcing it.
+
+- ✅ `list_my_personal_montages()` / `list_my_group_montages()` RPCs
+  enforce the free-tier archive window server-side — a free user's
+  session simply cannot retrieve a montage older than the window via any
+  client code path, since RLS alone only ever restricted by *ownership*,
+  never by *date+entitlement*. `mobile/src/services/montages.ts` now
+  calls these RPCs instead of a raw table select.
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/entitlement_archive.test.sql` proves a free-tier user
+  sees only the montage inside the 30-day window (not a 60-day-old one)
+  and that upgrading to `plus` immediately unlocks the full archive —
+  wired into `run_all.sh` and CI.
+- **Known, deliberate duplication** (documented in both places, not
+  silently drifting): the 30-day figure is hardcoded in the SQL function
+  *and* in `mobile/src/constants/entitlements.ts`'s
+  `ENTITLEMENT_LIMITS.free.memoryArchiveDays` (used for the paywall's
+  feature-comparison table), because this build has no shared source of
+  truth between Postgres and the TS bundle. A future pass could make the
+  RPC the single source of truth and have the client fetch the limit from
+  it instead of hardcoding — not done here to keep this change scoped.
+- ✅ "On This Day" resurfacing (`memories_on_this_day()`) is deliberately
+  **not** subject to this window — surfacing something old on its
+  anniversary is a different feature than browsing the full history, and
+  a free user should still get a 1-year-ago memory even with a 30-day
+  general archive cap.
 
 ---
 

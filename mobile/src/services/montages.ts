@@ -51,29 +51,33 @@ export function subscribeToMontage(montageId: string, onChange: (montage: Montag
   };
 }
 
-export async function listPersonalMontages(userId: string): Promise<Montage[]> {
-  const { data } = await supabase
-    .from('montages')
-    .select('*')
-    .eq('user_id', userId)
-    .order('session_date', { ascending: false });
+/** Goes through list_my_personal_montages() rather than a direct table
+ * select — that RPC is what actually enforces
+ * ENTITLEMENT_LIMITS.free.memoryArchiveDays server-side (see
+ * supabase/migrations/20260831180000_entitlement_enforced_archive.sql).
+ * A raw client-side select would return every montage regardless of tier;
+ * RLS alone doesn't limit by date/entitlement, only by ownership. */
+export async function listPersonalMontages(): Promise<Montage[]> {
+  const { data, error } = await supabase.rpc('list_my_personal_montages');
+  if (error) return [];
   return (data as Montage[]) ?? [];
 }
 
 export type GroupMontage = Montage & { group_name: string };
 
-/** Group montages the caller can currently see (RLS already scopes this to
- * groups they belong to — this just joins in the group name for display). */
+/** Same entitlement-enforcement reasoning as listPersonalMontages — goes
+ * through list_my_group_montages() rather than a direct select. Group
+ * names are joined in a second, small query (the RPC's return type is
+ * fixed to plain `montages` rows) rather than exposed by the RPC itself. */
 export async function listGroupMontages(): Promise<GroupMontage[]> {
-  const { data } = await supabase
-    .from('montages')
-    .select('*, groups(name)')
-    .not('group_id', 'is', null)
-    .order('session_date', { ascending: false });
-  return ((data ?? []) as unknown as (Montage & { groups: { name: string } | null })[]).map((m) => ({
-    ...m,
-    group_name: m.groups?.name ?? 'Group',
-  }));
+  const { data: montages, error } = await supabase.rpc('list_my_group_montages');
+  if (error || !montages || montages.length === 0) return [];
+
+  const groupIds = [...new Set((montages as Montage[]).map((m) => m.group_id).filter((id): id is string => Boolean(id)))];
+  const { data: groups } = await supabase.from('groups').select('id, name').in('id', groupIds);
+  const nameById = new Map((groups ?? []).map((g) => [g.id, g.name as string]));
+
+  return (montages as Montage[]).map((m) => ({ ...m, group_name: (m.group_id && nameById.get(m.group_id)) ?? 'Group' }));
 }
 
 /** "On this day": ready personal montages from exactly 7/30/365 days ago. */

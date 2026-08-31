@@ -94,9 +94,15 @@ transitions (proven in a unit test using a real America/New_York EST↔EDT
 boundary). Computed slots are mirrored into `capture_slots` (so the Today
 timeline has a durable, server-visible record independent of whether a
 local notification survives an app kill) and scheduled as local
-notifications via `expo-notifications`. Server-side push delivery
-(so reminders survive an app kill even without opening the app) is
-**not yet implemented** — see `docs/IMPLEMENTATION_STATUS.md`.
+notifications via `expo-notifications`. A `send-capture-reminders`
+Edge Function is the backup delivery path (so a reminder survives an app
+kill/reinstall) — it reads the same `capture_slots` rows rather than
+recomputing the schedule, and a shared `captureSlotId` between the local
+and server notification lets the client suppress a duplicate display
+(`mobile/src/lib/notificationDedup.ts`) if it sees both. See
+`docs/IMPLEMENTATION_STATUS.md` (Phase 9) for exactly what's verified and
+`docs/DEPLOYMENT.md` for the one-time `pg_cron` scheduling step a real
+project needs.
 
 ## What's deliberately NOT in this architecture
 

@@ -53,16 +53,20 @@ before relying on these):
 
 ## Key cost-control levers
 
-- **Expire/compress raw clips after rendering** — keep the finished
-  montage long-term, not every source clip forever. Not yet implemented
-  in this build (clips currently persist until the owner deletes them or
-  the account is deleted) — a good Milestone-2-scope addition once real
-  storage costs are observed.
-- **Cap free-tier memory/history length** — `ENTITLEMENT_LIMITS.free.memoryArchiveDays`
-  (`mobile/src/constants/entitlements.ts`) already exists for exactly
-  this; it's an editable hypothesis (30 days), not enforced server-side
-  yet (the client-side archive query doesn't currently filter by it) —
-  another good near-term follow-up.
+- **Expire raw clips after rendering** — implemented: the render worker
+  marks a clip `used` once it's in its owner's own personal montage, and
+  a scheduled `purge-used-clips` function frees the storage object (not
+  the row) after `RAW_CLIP_RETENTION_DAYS` (default 7). Needs the
+  `pg_cron` scheduling step in `docs/DEPLOYMENT.md` to actually run on a
+  real project. Video *compression* beyond the worker's existing
+  normalization pass (already re-encodes to a consistent bitrate/codec)
+  is still a documented future lever, not implemented.
+- **Cap free-tier memory/history length** — implemented and
+  server-enforced (not just a documented hypothesis): `list_my_personal_
+  montages()`/`list_my_group_montages()` RPCs actually filter by
+  `ENTITLEMENT_LIMITS.free.memoryArchiveDays` (`mobile/src/constants/
+  entitlements.ts`, 30 days) — proven in
+  `supabase/tests/entitlement_archive.test.sql`.
 - **Consider S3-compatible egress-free storage** (Cloudflare R2, Backblaze
   B2) once video egress costs start mattering — both are commonly used
   alongside Supabase for exactly this reason. Not integrated in this

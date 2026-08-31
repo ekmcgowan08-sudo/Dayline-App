@@ -33,7 +33,7 @@ export default function Memories() {
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const [otd, p, g] = await Promise.all([getMemoriesOnThisDay(), listPersonalMontages(userId), listGroupMontages()]);
+    const [otd, p, g] = await Promise.all([getMemoriesOnThisDay(), listPersonalMontages(), listGroupMontages()]);
     setOnThisDay(otd);
     setPersonal(p.filter((m) => m.status === 'ready'));
     setGroupMontages(g.filter((m) => m.status === 'ready'));

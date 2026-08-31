@@ -88,6 +88,8 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/rls_security.test.sql postgres
       - name: Run worker job-claim test suite
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/worker_claim.test.sql postgres
+      - name: Run entitlement archive test suite
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/entitlement_archive.test.sql postgres
 
   dependency-audit:
     name: Dependency audit (high/critical fails the build)

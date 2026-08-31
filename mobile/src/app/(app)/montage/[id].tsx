@@ -209,11 +209,14 @@ export default function MontageReveal() {
     );
   }
 
+  // The full 6-emoji palette is always shown (not just emojis someone has
+  // already used) so reacting is a one-tap toggle, not a two-step "open a
+  // picker, then pick."
   const reactionCounts = REACTION_EMOJIS.map((emoji) => ({
     emoji,
     count: reactions.filter((r) => r.emoji === emoji).length,
     mine: reactions.some((r) => r.emoji === emoji && r.user_id === userId),
-  })).filter((r) => r.count > 0 || true); // always show the full palette, counts optional
+  }));
 
   return (
     <Screen padded={false}>

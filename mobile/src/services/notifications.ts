@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { alreadyShown, markShown } from '../lib/notificationDedup';
 import { supabase } from '../lib/supabase';
 import { computeSlotTimesForDate, todayISOInTimeZone, type CaptureSchedule } from './schedule';
 
@@ -11,12 +12,21 @@ import { computeSlotTimesForDate, todayISOInTimeZone, type CaptureSchedule } fro
 const CAPTURE_REMINDER_TAG = 'dayline-capture-reminder';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const captureSlotId = notification.request.content.data?.captureSlotId as string | undefined;
+    if (captureSlotId) {
+      if (await alreadyShown(captureSlotId)) {
+        return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
+      }
+      await markShown(captureSlotId);
+    }
+    return {
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 export async function requestNotificationPermission(): Promise<boolean> {
@@ -92,12 +102,23 @@ export async function syncTodaysCaptureSlots(
   const now = Date.now();
   const futureSlots = allSlots.filter((slot) => slot.getTime() > now);
 
+  // Look up each slot's row id (including ones that already existed from
+  // an earlier sync today) so the local notification can carry the same
+  // captureSlotId the server-push backup uses for duplicate suppression.
+  const { data: slotRows } = await supabase
+    .from('capture_slots')
+    .select('id, scheduled_at')
+    .eq('user_id', userId)
+    .eq('slot_date', todayISO);
+  const slotIdByTime = new Map((slotRows ?? []).map((r) => [r.scheduled_at, r.id as string]));
+
   for (const slot of futureSlots) {
+    const captureSlotId = slotIdByTime.get(slot.toISOString());
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Capture this moment',
         body: 'Five seconds of right now — whatever it is.',
-        data: { tag: CAPTURE_REMINDER_TAG },
+        data: { tag: CAPTURE_REMINDER_TAG, ...(captureSlotId ? { captureSlotId } : {}) },
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: slot },
     });

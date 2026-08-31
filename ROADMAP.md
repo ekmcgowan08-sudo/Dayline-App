@@ -7,7 +7,11 @@ upload, Today timeline, real ffmpeg-rendered personal montages, groups
 with atomic invite/cap/rate-limit enforcement, "Our Day" group montages,
 reactions/comments/reports/blocks, memories, settings, real account
 deletion, subscription entitlement plumbing (mock + live-ready),
-consent-gated AI captions, RLS security test suite, CI configuration. See
+consent-gated AI captions, RLS security test suite, CI configuration.
+Also since folded into Milestone 1 rather than left for Milestone 2:
+server-side backup push delivery for capture reminders, raw-clip storage
+lifecycle (mark-used + scheduled purge), and server-enforced (not just
+documented) free-tier memory archive limits. See
 `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification tier
 on every piece.
 
@@ -15,14 +19,11 @@ on every piece.
 
 - Run this build's Edge Functions and worker against a real Supabase
   project end-to-end (the one gap this development sandbox genuinely
-  couldn't close — no Docker daemon, no live project).
-- Server-side push notification delivery (a scheduled job hitting Expo's
-  push API), so reminders survive an app kill without the app having been
-  opened recently.
-- Storage lifecycle: auto-expire/compress raw clips after a montage
-  renders successfully (see `COSTS.md`'s cost-control levers).
-- Enforce `ENTITLEMENT_LIMITS.free.memoryArchiveDays` server-side, not
-  just as a documented hypothesis.
+  couldn't close — no Docker daemon, no live project). This includes
+  actually enabling `pg_cron`/`pg_net` and scheduling
+  `send-capture-reminders`/`purge-used-clips` per `docs/DEPLOYMENT.md` —
+  both functions exist and are tested in isolation, but the scheduling
+  itself needs a real project.
 - Crash reporting (e.g., Sentry) wired into the mobile app.
 - Replace placeholder icon/splash assets with real Dayline branding (see
   `docs/ASSET_LICENSES.md`).
