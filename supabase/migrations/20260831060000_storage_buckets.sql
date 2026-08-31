@@ -3,8 +3,10 @@
 -- used and which is guessable) — enforced by convention in application
 -- code (mobile upload service, worker), documented in docs/SECURITY.md.
 --
--- clips/{user_id}/{uuid}.mp4       — raw 5-second captures
--- montages/{kind}/{owner_id}/{uuid}.mp4 — rendered output
+-- Paths are relative to each bucket (the bucket name is not repeated in
+-- the object path):
+--   clips bucket:    {user_id}/{uuid}.mp4       — raw 5-second captures
+--   montages bucket: {kind}/{owner_id}/{uuid}.mp4 — rendered output
 --
 -- The {user_id}/{group_id} folder segment is what RLS keys off of below;
 -- everything after it is an opaque random id so a leaked/guessed montage

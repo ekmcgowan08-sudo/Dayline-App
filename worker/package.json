@@ -1,0 +1,24 @@
+{
+  "name": "dayline-render-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Containerized FFmpeg worker that renders Dayline personal and group montages.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsc -p tsconfig.json --watch",
+    "test": "SUPABASE_URL=http://localhost:54321 SUPABASE_SERVICE_ROLE_KEY=test-only-not-real node --import tsx --test src/**/__tests__/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
+    "date-fns-tz": "^3.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}
