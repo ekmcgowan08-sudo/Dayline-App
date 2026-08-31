@@ -618,6 +618,11 @@ only (open the app and see it).
   confirmed applying cleanly via a fresh `run_all.sh` — no dedicated RLS
   test needed, since it only adds a column to a table whose existing
   `for all using (auth.uid() = user_id)` policy already covers it.
+- ✅ **Confirmed on real CI**: run 33429526839, all 7 jobs passed
+  (mobile, worker, Docker build, database, edge-functions-typecheck,
+  dependency audit, secret scan) — no regressions from this phase's
+  changes, checked individually per job, not just the run's overall
+  conclusion.
 - 🚫 Not exercised against a live Expo push send or a real device (same
   constraint as every push-related piece in this build).
 
