@@ -570,9 +570,17 @@ pipeline that never needs email at all.
   behavior, that a new request is allowed once the prior one is no longer
   pending, and that a user can never read another user's export
   requests (RLS) — wired into `run_all.sh` and CI.
-- 🚫 The two Edge Functions themselves (Deno) are typechecked in CI
-  (`edge-functions-typecheck`) but, like every other function in this
-  build, not exercised against a live Supabase project from this sandbox.
+- ✅ **Confirmed on real CI, not just locally-reviewed**: this sandbox
+  can't `deno check` anything (its egress policy blocks `esm.sh`, which
+  every function in this build imports `@supabase/supabase-js` from) —
+  run 33426326321's `edge-functions-typecheck` job is the first real
+  confirmation these two functions actually typecheck. Same run's
+  `database` job also confirms `data_export.test.sql` passes against a
+  real `postgres:16` service container, not just this sandbox's local
+  Postgres.
+- 🚫 Still not exercised against a live Supabase project's real storage/
+  auth calls (same constraint as every other Edge Function in this
+  build) — that needs `deploy-supabase.yml` and a real account.
 
 ---
 
