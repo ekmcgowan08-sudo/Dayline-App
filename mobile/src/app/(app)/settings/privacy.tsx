@@ -1,10 +1,19 @@
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, View } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { router, useFocusEffect } from 'expo-router';
 import { spacing } from '../../../constants/theme';
 import { useAuthStore } from '../../../state/auth-store';
-import { confirmAccountDeletion, requestAccountDeletion, requestDataExport } from '../../../services/account';
+import {
+  confirmAccountDeletion,
+  getExportDownloadUrl,
+  getLatestExportRequest,
+  requestAccountDeletion,
+  requestDataExport,
+} from '../../../services/account';
 import { listBlockedUsers, unblockUser } from '../../../services/moderation';
+import type { DataExportRequest } from '../../../types/database';
 import { Banner } from '../../../components/ui/Banner';
 import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
@@ -16,14 +25,18 @@ import { useTheme } from '../../../hooks/use-theme';
 export default function PrivacySettings() {
   const theme = useTheme();
   const signOut = useAuthStore((s) => s.signOut);
+  const userId = useAuthStore((s) => s.session?.user.id);
   const [blocked, setBlocked] = useState<{ blocked_id: string; display_name: string | null }[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [exportRequest, setExportRequest] = useState<DataExportRequest | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       listBlockedUsers().then(setBlocked);
-    }, [])
+      if (userId) getLatestExportRequest(userId).then(setExportRequest);
+    }, [userId])
   );
 
   async function handleUnblock(blockedId: string) {
@@ -32,8 +45,40 @@ export default function PrivacySettings() {
   }
 
   async function handleExportRequest() {
+    if (!userId) return;
+    setExportBusy(true);
     const { error } = await requestDataExport();
-    setMessage(error ?? "Request received — we'll email you a copy of your data.");
+    if (error) {
+      setMessage(error);
+    } else {
+      setMessage("Request received — this usually takes a few minutes. Check back here to download it.");
+      setExportRequest(await getLatestExportRequest(userId));
+    }
+    setExportBusy(false);
+  }
+
+  async function handleExportDownload() {
+    if (!exportRequest) return;
+    setExportBusy(true);
+    setMessage(null);
+    try {
+      const { url, error } = await getExportDownloadUrl(exportRequest.id);
+      if (error || !url) {
+        setMessage(error ?? "Couldn't prepare your export — try again.");
+        return;
+      }
+      const localPath = `${FileSystem.cacheDirectory}dayline-export-${exportRequest.id}.json`;
+      const { uri } = await FileSystem.downloadAsync(url, localPath);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/json', UTI: 'public.json' });
+      } else {
+        setMessage(`Saved to ${uri}`);
+      }
+    } catch {
+      setMessage("Couldn't prepare your export — try again.");
+    } finally {
+      setExportBusy(false);
+    }
   }
 
   function handleDeleteAccount() {
@@ -83,10 +128,22 @@ export default function PrivacySettings() {
             <Card>
               <Text variant="bodyMedium">Export your data</Text>
               <Text variant="caption" color={theme.textSecondary}>
-                Request a copy of your profile, clips metadata, and montages.
+                {exportRequest?.status === 'pending'
+                  ? "We're preparing your export now — check back in a few minutes."
+                  : 'Get a copy of your profile, clips metadata, and montage history.'}
               </Text>
               <View style={{ marginTop: spacing.sm }}>
-                <Button label="Request export" variant="secondary" onPress={handleExportRequest} />
+                {exportRequest?.status === 'fulfilled' ? (
+                  <Button label="Download my data" onPress={handleExportDownload} loading={exportBusy} />
+                ) : (
+                  <Button
+                    label={exportRequest?.status === 'pending' ? 'Preparing…' : 'Request export'}
+                    variant="secondary"
+                    onPress={handleExportRequest}
+                    loading={exportBusy}
+                    disabled={exportRequest?.status === 'pending'}
+                  />
+                )}
               </View>
             </Card>
 

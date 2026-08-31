@@ -21,6 +21,7 @@ export type GroupRole = 'owner' | 'admin' | 'member';
 export type InviteCodeStatus = 'active' | 'revoked';
 export type ReportTargetType = 'clip' | 'montage' | 'user' | 'comment';
 export type ReportStatus = 'open' | 'reviewing' | 'actioned' | 'dismissed';
+export type DataExportStatus = 'pending' | 'fulfilled';
 export type Entitlement = 'free' | 'plus';
 export type ReactionEmoji = '❤️' | '😂' | '😮' | '🥹' | '🙌' | '🔥';
 
@@ -198,6 +199,15 @@ export interface TranscriptionConsent {
   user_id: UUID;
   consented: boolean;
   updated_at: ISODateTime;
+}
+
+export interface DataExportRequest {
+  id: UUID;
+  user_id: UUID;
+  requested_at: ISODateTime;
+  status: DataExportStatus;
+  fulfilled_at: ISODateTime | null;
+  storage_path: string | null;
 }
 
 /** Result shape returned by the join_group_by_code() RPC (see migration

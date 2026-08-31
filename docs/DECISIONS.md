@@ -565,4 +565,57 @@ three inputs (a well-formed fake DSN, a malformed string, an empty
 value) to prove its parsing/error-handling logic before pushing it as
 something that will run unattended in CI.
 
+## 2026-08-31 — Automated data-export fulfillment, no email needed
+
+The user said to continue. The last remaining item explicitly flagged as
+a real (not hypothetical) gap in `docs/OWNER_ACTIONS_REQUIRED.md`'s "not
+required but worth knowing about" section was data-export fulfillment —
+`request_data_export()` recorded a genuine request since Phase 5, but
+actually compiling and delivering the data was a manual operator step,
+because this build has no email-sending infrastructure and building one
+felt premature for a beta.
+
+**Decision: skip email entirely rather than add an email provider just
+for this.** The user already trusts the app enough to be signed into it;
+a signed-URL download inside Settings → Privacy & data needs no new
+third-party dependency, no new secret, and no deliverability concerns
+(email a JSON attachment somewhere it might get filtered as spam). This
+mirrors `get-montage-url`'s existing pattern exactly: an Edge Function
+checks ownership server-side, mints a short-lived signed URL, the client
+downloads and shares it via `expo-file-system`/`expo-sharing` (already
+used for montage save/share, so no new mobile dependency either).
+
+**Split into two functions on purpose**, matching the codebase's existing
+split between `purge-used-clips` (cron-invoked, does work) and
+`get-montage-url` (JWT-invoked, hands out access): `fulfill-data-export`
+runs on a schedule and does the actual compiling/uploading;
+`get-export-url` is what the client calls, and never touches anything
+but a single already-fulfilled row it's confirmed belongs to the caller.
+Neither function needed inventing a new pattern.
+
+**Metadata-only, deliberately** — the export includes clip *timestamps*
+and montage *history*, not raw video (no `storage_path` fields at all).
+This matches what `docs/PRIVACY_DATA_FLOW.md` already promised before
+this function existed, and it's arguably more useful anyway: the clips
+and montages stay playable in the app for as long as the account exists,
+so a video-heavy JSON export wouldn't add access, just duplicate it.
+
+**`request_data_export()` now dedupes.** The original version inserted a
+new row on every call with no guard — harmless until an automated
+fulfillment pipeline exists to actually process the backlog a
+double-tapped button could create. Fixed alongside adding the pipeline,
+not as an afterthought.
+
+Verified: `supabase/tests/data_export.test.sql` (3 assertions: dedup,
+a new request allowed once the prior one clears, cross-user RLS) run
+against real Postgres 16 — `run_all.sh` now reports 26 total SQL PASS
+assertions. Both new Edge Functions could not be `deno check`'d locally
+(this sandbox's egress policy blocks `esm.sh`, the CDN both this and
+every pre-existing function import `@supabase/supabase-js` from — not a
+new limitation, just one this pass happened to hit directly rather than
+inheriting silently) — reviewed carefully by hand against the working
+`get-montage-url`/`purge-used-clips` functions' exact patterns, and left
+for the real `edge-functions-typecheck` CI job (proven working in the
+prior pass) to confirm.
+
 (Further entries appended as work proceeds through later phases.)

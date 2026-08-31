@@ -36,6 +36,8 @@ supabase functions deploy revenuecat-webhook --no-verify-jwt
 supabase functions deploy transcribe
 supabase functions deploy send-capture-reminders --no-verify-jwt
 supabase functions deploy purge-used-clips --no-verify-jwt
+supabase functions deploy fulfill-data-export --no-verify-jwt
+supabase functions deploy get-export-url
 supabase secrets set --env-file functions/.env   # after filling in real values
 
 # 5. Render worker
@@ -117,6 +119,36 @@ select cron.schedule(
 Without this, raw clips simply accumulate in storage indefinitely until
 the user deletes them individually or deletes their account — functional,
 just more expensive at scale than necessary.
+
+### Data-export fulfillment scheduling (recommended before real usage)
+
+`fulfill-data-export` compiles a requester's profile/clips-metadata/
+montages/activity into JSON and uploads it to the private `exports`
+bucket (see `docs/PRIVACY_DATA_FLOW.md`); `get-export-url` (deployed with
+normal JWT verification, unlike the other three cron-invoked functions
+here) is how the app retrieves a short-lived signed URL to download it —
+no email-sending infrastructure needed. Same `pg_cron` mechanism, run
+every few minutes is plenty since requests are rare:
+
+```sql
+select cron.schedule(
+  'fulfill-data-export',
+  '*/10 * * * *',
+  $$
+  select net.http_post(
+    url := 'https://<your-project-ref>.supabase.co/functions/v1/fulfill-data-export',
+    headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>', 'Content-Type', 'application/json'),
+    body := '{}'::jsonb
+  );
+  $$
+);
+```
+
+Without this, a requested export stays `pending` forever (the request is
+still recorded — genuinely auditable, just never fulfilled) until someone
+manually invokes the function once. There's no way to compile the export
+some other way without this scheduling — unlike the other two backup
+paths above, this one has no local fallback.
 
 ## Production deployment runbook
 

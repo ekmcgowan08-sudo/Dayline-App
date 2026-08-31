@@ -22,7 +22,7 @@ and pasted a few tokens into this repo's secrets
 | Workflow | What it needs from you | What it does |
 |---|---|---|
 | `ci.yml` | Nothing (already runs automatically) | Real typecheck/lint/tests for mobile + worker, a **real Docker image build** of the worker, real Postgres 16 + RLS test suite, Deno typecheck, dependency audit, secret scan |
-| `deploy-supabase.yml` | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`, `SUPABASE_FUNCTIONS_ENV` | Links your Supabase project, runs every migration, deploys all 7 Edge Functions, sets their secrets |
+| `deploy-supabase.yml` | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`, `SUPABASE_FUNCTIONS_ENV` | Links your Supabase project, runs every migration, deploys all 9 Edge Functions, sets their secrets |
 | `eas-build.yml` | `EXPO_TOKEN`, `MOBILE_ENV_FILE` | Builds the actual mobile app on Expo's cloud — an iOS Simulator build (no Apple Developer account needed) and/or an installable Android APK, no Xcode/Android Studio/Docker required anywhere |
 | `verify-sentry.yml` | `SENTRY_DSN` | Sends a real event straight to Sentry's ingest API and fails the job unless Sentry actually accepts it |
 
@@ -42,20 +42,24 @@ reference and for anyone who prefers running them locally.
    hand:
    - `supabase link --project-ref <ref> && supabase db push` to apply
      every migration in `supabase/migrations/`.
-   - Deploy the 7 Edge Functions in `supabase/functions/` (commands in
+   - Deploy the 9 Edge Functions in `supabase/functions/` (commands in
      `README.md`/`docs/DEPLOYMENT.md`).
    - Set secrets via `supabase secrets set --env-file supabase/functions/.env`
      (fill in real values first — see `supabase/functions/.env.example`).
    - Fill in `mobile/.env` and `worker/.env` with the real project URL,
      anon key, and service role key.
-2. **Enable `pg_cron`/`pg_net` and schedule the two backup jobs**
+2. **Enable `pg_cron`/`pg_net` and schedule the three cron-invoked jobs**
    (Database → Extensions in the dashboard, then the `cron.schedule(...)`
-   calls in `docs/DEPLOYMENT.md`'s "Server push scheduling" and
-   "Raw-clip storage purge scheduling" sections): `send-capture-reminders`
-   (push-notification backup delivery) and `purge-used-clips` (storage
-   cost control). The app works without this — reminders just rely
-   solely on local notifications, and raw clips simply aren't
-   auto-purged — but both are recommended before real usage.
+   calls in `docs/DEPLOYMENT.md`'s "Server push scheduling",
+   "Raw-clip storage purge scheduling", and "Data-export fulfillment
+   scheduling" sections): `send-capture-reminders` (push-notification
+   backup delivery), `purge-used-clips` (storage cost control), and
+   `fulfill-data-export` (compiles+uploads a requested data export — see
+   `docs/PRIVACY_DATA_FLOW.md`). The app works without the first two —
+   reminders just rely solely on local notifications, and raw clips
+   simply aren't auto-purged — but a requested export stays unfulfilled
+   forever without the third, since it has no local fallback the way the
+   other two do. All three are recommended before real usage.
 3. **Apple Developer Program** ($99/yr) — needed for TestFlight/App Store.
 4. **Google Play Developer account** ($25 one-time) — needed for Play
    Store internal testing/release.
@@ -162,9 +166,6 @@ render pipeline, real `npm`/`eslint`/`tsc`/`jest` runs — see
 - Placeholder app icon/splash images (Expo template defaults) — see
   `docs/ASSET_LICENSES.md`. Cosmetic, not blocking, but should change
   before any store submission.
-- Automated data-export fulfillment doesn't exist yet — requests are
-  genuinely recorded; compiling and sending the archive is a manual
-  runbook step for now (`docs/PRIVACY_DATA_FLOW.md`).
 
 ---
 

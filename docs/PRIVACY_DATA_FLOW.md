@@ -72,13 +72,20 @@ requested clip per call, nothing else.
   deleted (they belong to the group, not you individually) — only your
   own membership/contribution rows are removed via the cascade.
 - **Data export**: `request_data_export()` records a genuine, auditable
-  request. **Fulfillment is currently a manual step**: an operator with
-  service-role access queries the requesting user's rows across
-  `profiles`, `clips` (metadata only), `montages`, `group_members`, and
-  compiles them into a file to send to the user's registered email. This
-  is exactly what the beta needs and no more — building an automated
-  pipeline (plus the email-sending infrastructure it requires) is
-  reasonable follow-up work once there's real user volume, not before.
+  request (deduped — calling it again while a request is still pending is
+  a no-op, so tapping the button twice doesn't queue duplicate work).
+  Fulfillment is automated: a scheduled Edge Function
+  (`fulfill-data-export`, same `pg_cron` mechanism as the capture-reminder
+  and clip-purge backup jobs — see `docs/DEPLOYMENT.md`) compiles the
+  requester's profile, clips metadata (no raw video, no storage paths —
+  just what was captured and when), montages, group memberships, authored
+  comments/reactions/reports, subscription status, and notification/
+  transcription preferences into one JSON file, uploaded to a private
+  `exports` storage bucket. No email-sending infrastructure is needed:
+  the user retrieves it entirely in-app, via a short-lived signed URL
+  from `get-export-url` (the same ownership-checked-server-side pattern
+  `get-montage-url` already uses for montage playback) — see Settings →
+  Privacy & data.
 
 ## Minimal analytics
 

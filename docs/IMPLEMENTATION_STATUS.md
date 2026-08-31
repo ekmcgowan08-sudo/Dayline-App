@@ -196,10 +196,10 @@ product spec.
   standalone `account_deletion_audit` row (no FK to the now-deleted user)
   is written afterward so deletion stays provable without retaining any
   of the deleted person's data. Data export is a real, audited *request*
-  (`data_export_requests` table + RPC); **fulfillment (actually compiling
-  and emailing an archive) is a documented manual step for this beta**,
-  not automated — no email-sending infrastructure exists in this build.
-  This gap is stated plainly, not hidden.
+  (`data_export_requests` table + RPC); fulfillment was originally a
+  documented manual step for this beta (no email-sending infrastructure
+  exists in this build) — **superseded by Phase 20**, which automated it
+  without ever needing email.
 - 🚫 Not run against a live Supabase project (same constraint as Phase 3's
   Edge Functions — reviewed and typechecked, not exercised against real
   storage/auth calls).
@@ -534,6 +534,45 @@ that needs real credentials.
   real accounts yet — that step needs the account credentials only an
   owner can provide (see `docs/OWNER_ACTIONS_REQUIRED.md`'s "fast path"
   section for exactly which secrets each one needs).
+
+## Phase 20 — Automated data-export fulfillment
+
+Closed the one item still listed under "Not required, but worth knowing
+about" in `docs/OWNER_ACTIONS_REQUIRED.md`: fulfilling a data-export
+request meant an operator manually compiling a file and emailing it,
+since this build has no email infrastructure. Replaced with a real
+pipeline that never needs email at all.
+
+- ✅ `request_data_export()` (`20260831210000_data_export_fulfillment.sql`)
+  now dedupes — calling it while a request is already `pending` is a
+  no-op, so repeat taps on the "Request export" button can't queue
+  duplicate work.
+- ✅ `fulfill-data-export` (CRON_SECRET-authenticated, scheduled via the
+  same `pg_cron` mechanism as `send-capture-reminders`/`purge-used-clips`):
+  compiles a
+  requester's profile, clips metadata (no raw video/storage paths),
+  montages, group memberships, authored comments/reactions/reports,
+  subscription, and notification/transcription preferences into JSON,
+  uploaded to a new private `exports` storage bucket. Non-fatal
+  per-request error handling — a failure leaves that one request
+  `pending` for the next scheduled run rather than losing track of it.
+- ✅ `get-export-url`: the same ownership-checked-server-side
+  signed-URL pattern `get-montage-url` already uses for montage
+  playback — the `exports` bucket has zero client-facing storage
+  policies, so a client's own session key can never read it directly.
+- ✅ Mobile: Settings → Privacy & data now shows the live status of a
+  user's most recent export request (pending/fulfilled) and, once
+  fulfilled, a real "Download my data" button — downloads the JSON via
+  the signed URL and hands it to the OS share sheet (`expo-file-system` +
+  `expo-sharing`, the same pattern already used for montage save/share).
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/data_export.test.sql` (3 assertions) proves the dedup
+  behavior, that a new request is allowed once the prior one is no longer
+  pending, and that a user can never read another user's export
+  requests (RLS) — wired into `run_all.sh` and CI.
+- 🚫 The two Edge Functions themselves (Deno) are typechecked in CI
+  (`edge-functions-typecheck`) but, like every other function in this
+  build, not exercised against a live Supabase project from this sandbox.
 
 ---
 

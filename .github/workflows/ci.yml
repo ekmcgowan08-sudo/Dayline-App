@@ -95,6 +95,8 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/group_timezone.test.sql postgres
       - name: Run input validation test suite
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/input_validation.test.sql postgres
+      - name: Run data export test suite
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/data_export.test.sql postgres
 
   dependency-audit:
     name: Dependency audit (high/critical fails the build)

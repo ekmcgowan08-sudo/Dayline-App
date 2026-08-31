@@ -14,24 +14,32 @@ lifecycle (mark-used + scheduled purge), server-enforced (not just
 documented) free-tier memory archive limits, an entitlement-gated Dayline
 end card, a tasteful on-video contributor-credits card for group
 montages, per-group timezone for group-montage day boundaries,
-defense-in-depth input length validation, and Sentry crash-reporting
-scaffolding (off by default, real no-op without a DSN). See
-`docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification tier
-on every piece.
+defense-in-depth input length validation, Sentry crash-reporting
+scaffolding (off by default, real no-op without a DSN), automated
+data-export fulfillment (`fulfill-data-export`/`get-export-url` — no
+manual operator step, no email infrastructure needed), and CI actually
+wired up + running (it existed since early in the build but had never
+once triggered — see `docs/DECISIONS.md`), plus three
+`workflow_dispatch` GitHub Actions workflows that turn Actions into a
+one-click deploy path for Supabase, EAS builds, and Sentry verification
+once account credentials exist. See `docs/IMPLEMENTATION_STATUS.md` for
+the exact, honest verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 
 - Run this build's Edge Functions and worker against a real Supabase
-  project end-to-end (the one gap this development sandbox genuinely
-  couldn't close — no Docker daemon, no live project). This includes
-  actually enabling `pg_cron`/`pg_net` and scheduling
-  `send-capture-reminders`/`purge-used-clips` per `docs/DEPLOYMENT.md` —
-  both functions exist and are tested in isolation, but the scheduling
-  itself needs a real project.
+  project end-to-end — the one gap this development sandbox genuinely
+  couldn't close directly (its egress policy denies supabase.com), now
+  covered by `deploy-supabase.yml` (see "The fast path" in
+  `docs/OWNER_ACTIONS_REQUIRED.md`) once an owner provides account
+  credentials. This includes actually enabling `pg_cron`/`pg_net` and
+  scheduling `send-capture-reminders`/`purge-used-clips`/
+  `fulfill-data-export` per `docs/DEPLOYMENT.md` — all three functions
+  exist and are tested in isolation, but the scheduling itself needs a
+  real project (no CLI/API equivalent, has to be a one-time dashboard
+  SQL-editor step).
 - Replace placeholder icon/splash assets with real Dayline branding (see
   `docs/ASSET_LICENSES.md`).
-- Automated data-export fulfillment (currently a manual runbook step —
-  see `docs/PRIVACY_DATA_FLOW.md`).
 
 ## Milestone 3 — Reveal & memories polish
 
