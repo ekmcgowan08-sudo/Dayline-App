@@ -29,6 +29,7 @@ before relying on these):
 | Supabase free tier (2 projects, 500MB DB, 1GB storage, 5GB egress, 50K MAU) | $0/mo |
 | Render worker on a free/near-free tier (or run locally) | $0–2/mo |
 | RevenueCat (free up to $2,500 MRR tracked) | $0/mo |
+| Sentry (free tier: 5K errors/mo, 1 seat) | $0/mo |
 | Apple Developer Program | $99/yr (one-time enrollment, recurring annually) |
 | Google Play Developer account | $25 one-time |
 | **Total to develop + internally test** | **~$0–2/mo + $99/yr + $25 one-time** |

@@ -49,22 +49,31 @@ you only have to read one list.
 8. **Render worker hosting** — pick a Docker-capable host (see `COSTS.md`
    for a few current options and prices) and provision an account/billing
    there; point its env vars at your Supabase project's service role key.
+9. **(Optional) Sentry account** for crash reporting — free tier covers a
+   beta's volume. Create a project, put its DSN in `mobile/.env`'s
+   `EXPO_PUBLIC_SENTRY_DSN`. The app runs correctly and gets a real error
+   boundary either way; without a DSN, `src/lib/crashReporting.ts` is a
+   clearly-labeled no-op (same treatment as the RevenueCat mock adapter —
+   see `docs/DECISIONS.md`). For build-time source-map upload (readable
+   stack traces instead of minified ones), also set `SENTRY_ORG`,
+   `SENTRY_PROJECT`, and `SENTRY_AUTH_TOKEN` as EAS build secrets — skip
+   this and builds still work, traces just won't symbolicate.
 
 ## Legal & business judgment (nondelegable)
 
-9. **Legal review** of `TERMS.md`, `PRIVACY.md`, `COMMUNITY_RULES.md`, and
-   `docs/LEGAL_DRAFTS.md` (DMCA process, subscription disclosures, App
-   Store/Play privacy disclosures, minimum-age/COPPA analysis). All are
-   working drafts, explicitly labeled as not legal advice throughout.
-10. **Confirm the 13+ minimum age default** is right for your actual
+10. **Legal review** of `TERMS.md`, `PRIVACY.md`, `COMMUNITY_RULES.md`, and
+    `docs/LEGAL_DRAFTS.md` (DMCA process, subscription disclosures, App
+    Store/Play privacy disclosures, minimum-age/COPPA analysis). All are
+    working drafts, explicitly labeled as not legal advice throughout.
+11. **Confirm the 13+ minimum age default** is right for your actual
     target audience — this was the task's own instructed default absent
     other evidence, not a business decision made on your behalf.
-11. **DMCA agent registration** (U.S. Copyright Office or equivalent) if
+12. **DMCA agent registration** (U.S. Copyright Office or equivalent) if
     operating in/serving jurisdictions where this applies.
-12. **Trademark/domain clearance for "Dayline"** — run the checklist in
+13. **Trademark/domain clearance for "Dayline"** — run the checklist in
     `docs/STORE_SUBMISSION.md`. The name is centralized in
     `mobile/src/constants/brand.ts` for a one-file rename if needed.
-13. **A real, monitored support inbox** — `support@dayline.app` is used
+14. **A real, monitored support inbox** — `support@dayline.app` is used
     throughout the app/docs as a placeholder; point it at something you
     actually read, or change it everywhere (again, centralized in
     `brand.ts`).
@@ -80,32 +89,34 @@ render pipeline, real `npm`/`eslint`/`tsc`/`jest` runs — see
 `docs/IMPLEMENTATION_STATUS.md` for exactly what and
 `docs/TESTING.md` for how to reproduce it. What's left needs one of:
 
-14. **A Docker-capable environment**: build/run `worker/Dockerfile`, and
+15. **A Docker-capable environment**: build/run `worker/Dockerfile`, and
     run a real `supabase start` local stack to confirm this repo's
     migrations apply cleanly through the genuine Supabase CLI (they're
     already proven against real Postgres semantics — this is about the
     Supabase-specific platform layer around it, not the SQL itself).
-15. **A macOS environment with Xcode / an Android emulator**: exercise
+16. **A macOS environment with Xcode / an Android emulator**: exercise
     the actual camera/microphone capture flow, push notification
     registration on a real device, and produce real App Store/Play Store
     screenshots (the shot list is drafted in `docs/STORE_SUBMISSION.md`,
     nothing has been captured).
-16. **Network access to revenuecat.com**: confirm the `revenuecat-webhook`
+17. **Network access to revenuecat.com**: confirm the `revenuecat-webhook`
     function's payload field names and auth-header convention against
     RevenueCat's current live docs (written from a web-search summary in
     this session — flagged explicitly in the function's own comments,
     see `docs/DECISIONS.md`).
-17. **Network access to GitHub Actions**: confirm `.github/workflows/ci.yml`
+18. **Network access to GitHub Actions**: confirm `.github/workflows/ci.yml`
     actually runs green on real infrastructure (only YAML-syntax-validated
     in this session).
+19. **Network access to sentry.io**: confirm a real event round-trips end
+    to end once `EXPO_PUBLIC_SENTRY_DSN` is set (item 9 above) — the
+    integration code is real and unit-tested for its no-op path, but no
+    event has actually been sent from this sandbox.
 
 ## Not required, but worth knowing about
 
 - Placeholder app icon/splash images (Expo template defaults) — see
   `docs/ASSET_LICENSES.md`. Cosmetic, not blocking, but should change
   before any store submission.
-- Crash reporting (e.g., Sentry) isn't wired in — recommended before
-  public launch, not required for the beta.
 - Automated data-export fulfillment doesn't exist yet — requests are
   genuinely recorded; compiling and sending the archive is a manual
   runbook step for now (`docs/PRIVACY_DATA_FLOW.md`).

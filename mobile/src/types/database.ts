@@ -115,6 +115,7 @@ export interface Group {
   invite_code_status: InviteCodeStatus;
   invite_code_expires_at: ISODateTime | null;
   max_members: number;
+  timezone: string;
   created_at: ISODateTime;
   updated_at: ISODateTime;
 }

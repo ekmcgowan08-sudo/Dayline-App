@@ -135,6 +135,13 @@ just more expensive at scale than necessary.
    RevenueCat keys at production values for the production build profile
    specifically (never bake production credentials into the development
    profile a wider group might run).
+8. (Optional) Set `EXPO_PUBLIC_SENTRY_DSN` for the production build
+   profile to turn on crash reporting (`mobile/src/lib/crashReporting.ts`
+   is a real no-op without it — see `docs/OWNER_ACTIONS_REQUIRED.md`).
+   For readable (non-minified) stack traces, also set `SENTRY_ORG`,
+   `SENTRY_PROJECT`, and `SENTRY_AUTH_TOKEN` as EAS build secrets so the
+   `@sentry/react-native/expo` config plugin can upload source maps
+   during the build.
 
 ## Rollback
 
@@ -173,8 +180,9 @@ just more expensive at scale than necessary.
   endpoint).
 - **Edge Functions**: Supabase's function logs; consider forwarding to a
   log aggregator once volume justifies it.
-- **Mobile**: crash reporting (e.g., Sentry) is not wired into this build
-  — recommended before public launch, tracked in `docs/OWNER_ACTIONS_REQUIRED.md`.
+- **Mobile**: Sentry crash reporting is wired in
+  (`mobile/src/lib/crashReporting.ts`) but off until `EXPO_PUBLIC_SENTRY_DSN`
+  is set — see step 8 above and `docs/OWNER_ACTIONS_REQUIRED.md`.
 
 ## Secret management
 

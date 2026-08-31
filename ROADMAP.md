@@ -8,10 +8,14 @@ with atomic invite/cap/rate-limit enforcement, "Our Day" group montages,
 reactions/comments/reports/blocks, memories, settings, real account
 deletion, subscription entitlement plumbing (mock + live-ready),
 consent-gated AI captions, RLS security test suite, CI configuration.
-Also since folded into Milestone 1 rather than left for Milestone 2:
+Also since folded into Milestone 1 rather than left for later milestones:
 server-side backup push delivery for capture reminders, raw-clip storage
-lifecycle (mark-used + scheduled purge), and server-enforced (not just
-documented) free-tier memory archive limits. See
+lifecycle (mark-used + scheduled purge), server-enforced (not just
+documented) free-tier memory archive limits, an entitlement-gated Dayline
+end card, a tasteful on-video contributor-credits card for group
+montages, per-group timezone for group-montage day boundaries,
+defense-in-depth input length validation, and Sentry crash-reporting
+scaffolding (off by default, real no-op without a DSN). See
 `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification tier
 on every piece.
 
@@ -24,7 +28,6 @@ on every piece.
   `send-capture-reminders`/`purge-used-clips` per `docs/DEPLOYMENT.md` —
   both functions exist and are tested in isolation, but the scheduling
   itself needs a real project.
-- Crash reporting (e.g., Sentry) wired into the mobile app.
 - Replace placeholder icon/splash assets with real Dayline branding (see
   `docs/ASSET_LICENSES.md`).
 - Automated data-export fulfillment (currently a manual runbook step —
@@ -40,11 +43,6 @@ on every piece.
 
 ## Milestone 4 — Groups at scale
 
-- Tasteful contributor identification baked into the rendered video
-  itself (currently shown in-app via comment/reaction author names, not
-  as an on-video overlay).
-- Consider per-group timezone setting for group-montage day boundaries
-  (currently UTC calendar day — see `docs/DECISIONS.md`).
 - Admin-role UI refinements (currently owner/admin have identical
   permissions in the app; the schema already distinguishes them for
   future differentiation).

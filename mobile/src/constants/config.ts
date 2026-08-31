@@ -16,6 +16,8 @@ export const ENV = {
   supabaseAnonKey: required('EXPO_PUBLIC_SUPABASE_ANON_KEY', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY),
   revenueCatIosKey: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? '',
   revenueCatAndroidKey: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ?? '',
+  /** Optional — see src/lib/crashReporting.ts. No DSN means crash reporting is a documented no-op, same treatment as RevenueCat's mock mode below. */
+  sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? '',
 };
 
 export const FEATURE_FLAGS = {
@@ -25,4 +27,6 @@ export const FEATURE_FLAGS = {
   socialLogin: process.env.EXPO_PUBLIC_FEATURE_SOCIAL_LOGIN === 'true',
   /** Real RevenueCat purchases vs. the local mock adapter. */
   liveSubscriptions: Boolean(ENV.revenueCatIosKey || ENV.revenueCatAndroidKey),
+  /** Real Sentry reporting vs. a local no-op (see src/lib/crashReporting.ts). */
+  crashReporting: Boolean(ENV.sentryDsn),
 };

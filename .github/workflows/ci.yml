@@ -90,6 +90,10 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/worker_claim.test.sql postgres
       - name: Run entitlement archive test suite
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/entitlement_archive.test.sql postgres
+      - name: Run group timezone test suite
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/group_timezone.test.sql postgres
+      - name: Run input validation test suite
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/input_validation.test.sql postgres
 
   dependency-audit:
     name: Dependency audit (high/critical fails the build)

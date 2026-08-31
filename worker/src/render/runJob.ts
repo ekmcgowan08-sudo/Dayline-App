@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { DAYLINE_END_CARD_TEXT } from '../brand.js';
 import { config } from '../config.js';
+import { DAYLINE_END_CARD_REQUIRED_FOR_FREE, getEntitlement } from '../entitlements.js';
 import { logger } from '../logger.js';
 import { supabaseAdmin } from '../supabaseAdmin.js';
 import { downloadClipToFile, uploadMontageFile } from './downloadClip.js';
 import { fetchEligibleClips, type MontageJob } from './fetchEligibleClips.js';
 import { renderMontage } from './pipeline.js';
+
+const MAX_CREDITS_LINES = 10; // matches GROUP_LIMITS.maxActiveMembers (mobile/src/constants/brand.ts)
 
 /** Error codes are intentionally generic/non-identifying — safe to display
  * to a user (see docs/SECURITY.md's "error codes safe for display"
@@ -58,6 +62,41 @@ export async function runJob(job: MontageJob): Promise<void> {
     }
 
     const titleCardText = job.title_card_text ?? formatTitleCard(job.session_date);
+
+    // Group montages get a tasteful contributor-credits card — everyone who
+    // filmed something for the day, in the order they first appear in the
+    // montage, capped so a large group doesn't produce a scrolling wall of
+    // names. Personal montages never get one: crediting a user to
+    // themselves is noise. Built from `eligibleClips` (what the day's
+    // roster actually was), not `renderedClipPaths` (what survived
+    // download/normalization) — a clip that failed to download for
+    // transient reasons shouldn't silently drop its owner from the credits.
+    let creditsText: string | undefined;
+    if (job.kind === 'group') {
+      const contributorIds = Array.from(new Set(eligibleClips.map((c) => c.contributorId))).slice(0, MAX_CREDITS_LINES);
+      const { data: contributorProfiles } = await supabaseAdmin
+        .from('profiles')
+        .select('id, display_name')
+        .in('id', contributorIds);
+      const nameById = new Map((contributorProfiles ?? []).map((p) => [p.id, p.display_name?.trim() || 'A friend']));
+      creditsText = contributorIds.map((id) => nameById.get(id) ?? 'A friend').join('\n');
+    }
+
+    // The branded Dayline end card is entitlement-gated for personal
+    // montages (the owner's own subscription controls their own export) but
+    // always shown for group montages — a shared "Our Day" video has no
+    // single subscriber whose personal tier should decide whether everyone
+    // else in the group sees branding removed too. See docs/DECISIONS.md.
+    let endCardText: string | undefined;
+    if (job.kind === 'personal' && job.user_id) {
+      const entitlement = await getEntitlement(job.user_id);
+      if (entitlement === 'free' && DAYLINE_END_CARD_REQUIRED_FOR_FREE) {
+        endCardText = DAYLINE_END_CARD_TEXT;
+      }
+    } else if (job.kind === 'group') {
+      endCardText = DAYLINE_END_CARD_TEXT;
+    }
+
     const skippedDuringRender: string[] = [];
 
     const result = await renderMontage({
@@ -65,6 +104,8 @@ export async function runJob(job: MontageJob): Promise<void> {
       outputPath: path.join(jobWorkDir, 'output.mp4'),
       workDir: jobWorkDir,
       titleCardText,
+      creditsText,
+      endCardText,
       onClipError: (err) => {
         skippedDuringRender.push(err.clipPath);
         return true; // one bad clip shouldn't sink an otherwise-good day

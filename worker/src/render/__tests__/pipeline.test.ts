@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { generateFixtures } from '../../test-fixtures/generate.js';
 import { probeVideo } from '../ffmpegExec.js';
-import { ClipRenderError, normalizeClip, renderMontage, renderTitleCard, OUTPUT_HEIGHT, OUTPUT_WIDTH } from '../pipeline.js';
+import { ClipRenderError, normalizeClip, renderMontage, renderTextCard, renderTitleCard, OUTPUT_HEIGHT, OUTPUT_WIDTH } from '../pipeline.js';
 
 let workDir: string;
 let fixtures: Awaited<ReturnType<typeof generateFixtures>>;
@@ -79,6 +79,59 @@ test('renderMontage concatenates a title card + multiple clips and skips a corru
   // title card (~1.8s) + landscape clip (2s) + portrait clip (1.5s), minus
   // nothing removed by fades (fades don't shorten duration) — roughly 5.3s.
   assert.ok(probe.durationSeconds > 4 && probe.durationSeconds < 7, `unexpected duration ${probe.durationSeconds}`);
+});
+
+test('renderTextCard renders multi-line (newline-joined) text as a portrait segment', async () => {
+  const out = path.join(workDir, 'textcard-multiline.mp4');
+  const duration = await renderTextCard('Ava\nBen\nCam', out, { durationSeconds: 2.4, fontSize: 44 });
+  const probe = await probeVideo(out);
+  assert.equal(probe.width, OUTPUT_WIDTH);
+  assert.equal(probe.height, OUTPUT_HEIGHT);
+  assert.ok(Math.abs(probe.durationSeconds - duration) < 0.3);
+});
+
+test('renderMontage appends a contributor-credits card and a branded end card after the clips', async () => {
+  const outputPath = path.join(workDir, 'group-montage.mp4');
+
+  const withoutExtras = await renderMontage({
+    clipPaths: [fixtures.landscapeWithAudio],
+    outputPath: path.join(workDir, 'render-job-baseline', 'output.mp4'),
+    workDir: path.join(workDir, 'render-job-baseline'),
+    titleCardText: 'Aug 31',
+  });
+
+  const withExtras = await renderMontage({
+    clipPaths: [fixtures.landscapeWithAudio],
+    outputPath,
+    workDir: path.join(workDir, 'render-job-extras'),
+    titleCardText: 'Aug 31',
+    creditsText: 'Ava\nBen',
+    endCardText: 'Dayline\nFive seconds at a time.',
+  });
+
+  const probe = await probeVideo(outputPath);
+  assert.equal(probe.width, OUTPUT_WIDTH);
+  assert.equal(probe.height, OUTPUT_HEIGHT);
+  // Credits + end card add real seconds on top of the baseline (title card
+  // + one clip, no extras) — proves the segments were actually appended,
+  // not just accepted as no-op options.
+  assert.ok(withExtras.durationSeconds > withoutExtras.durationSeconds + 2);
+});
+
+test('renderMontage does NOT append credits/end card when every clip is skipped (title-card-only output)', async () => {
+  const result = await renderMontage({
+    clipPaths: [fixtures.corrupt],
+    outputPath: path.join(workDir, 'title-only.mp4'),
+    workDir: path.join(workDir, 'render-job-title-only'),
+    titleCardText: 'Aug 31',
+    creditsText: 'Ava',
+    endCardText: 'Dayline',
+    onClipError: () => true,
+  });
+  assert.equal(result.renderedClipPaths.length, 0);
+  // Only the title card segment exists — duration should be close to the
+  // default 1.8s title card, not padded by credits/end card durations.
+  assert.ok(result.durationSeconds < 2.2, `unexpected duration ${result.durationSeconds}`);
 });
 
 test('renderMontage aborts entirely when onClipError returns false', async () => {

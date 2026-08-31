@@ -71,9 +71,24 @@
 
 Identical to the above, except: (a) eligibility is `group_contributions`
 rows (a clip's owner explicitly opted it into that specific group — group
-membership alone is never sufficient), and (b) `get-montage-url` checks
-group membership instead of ownership. See
-`worker/src/render/fetchEligibleClips.ts` for the authoritative query.
+membership alone is never sufficient), (b) `get-montage-url` checks group
+membership instead of ownership, (c) the calendar-day boundary uses the
+group's own `timezone` column (owner/admin-settable via
+`set_group_timezone()`, defaults to UTC) rather than the montage owner's
+profile timezone, and (d) the render appends a short contributor-credits
+card after the clips. See `worker/src/render/fetchEligibleClips.ts` for
+the authoritative eligibility query.
+
+## Entitlement-gated rendering
+
+The render worker (service role, no `auth.uid()`) reads a user's tier
+directly from `subscriptions` via `worker/src/entitlements.ts`, mirroring
+— rather than calling — the `current_entitlement()` Postgres function
+that RLS-scoped client requests use. This is where the free-tier branded
+"Dayline" end card is decided: gated by the owner's own tier for personal
+montages, always present for group montages (no single member's
+subscription should silently remove branding for everyone else sharing
+that video — see `docs/DECISIONS.md`).
 
 ## Security model
 

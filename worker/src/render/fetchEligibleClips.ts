@@ -1,5 +1,25 @@
 import { fromZonedTime } from 'date-fns-tz';
+import { logger } from '../logger.js';
 import { supabaseAdmin } from '../supabaseAdmin.js';
+
+/**
+ * `fromZonedTime` (via `Intl.DateTimeFormat` under the hood) throws for an
+ * unrecognized IANA zone name. Both call sites below store timezone strings
+ * validated at write time (profile onboarding, `set_group_timezone`), so
+ * this should never actually fire — but Node's ICU data and Postgres's
+ * timezone database aren't guaranteed to agree on every exotic zone name,
+ * and defaulting a render to UTC on a lookup failure is a far better
+ * failure mode than the whole montage job crashing over it.
+ */
+function fromZonedTimeSafe(localDateTime: string, timezone: string | null | undefined): string {
+  const tz = timezone ?? 'UTC';
+  try {
+    return fromZonedTime(localDateTime, tz).toISOString();
+  } catch (e) {
+    logger.warn('unrecognized timezone; falling back to UTC', { timezone: tz, error: (e as Error).message });
+    return fromZonedTime(localDateTime, 'UTC').toISOString();
+  }
+}
 
 export type EligibleClip = {
   id: string;
@@ -28,19 +48,19 @@ export type MontageJob = {
  *
  * Personal montages use the owner's profile timezone for the calendar-day
  * boundary (matching what the user saw as "today" on their Today
- * timeline). Group montages use a plain UTC calendar day — there's no
- * single canonical timezone for a group of people, so this is a
- * documented simplification (see docs/DECISIONS.md) rather than an
- * attempt to guess whose clock the "day" should follow.
+ * timeline). Group montages use the group's own `timezone` column (owner/
+ * admin-settable, defaults to UTC — see
+ * supabase/migrations/20260831190000_group_timezone.sql and
+ * `set_group_timezone`), the same as-good-as-it-gets choice a group makes
+ * once rather than the app guessing whose clock the "day" should follow.
  */
 export async function fetchEligibleClips(job: MontageJob): Promise<EligibleClip[]> {
   if (job.kind === 'personal') {
     if (!job.user_id) throw new Error('personal montage job missing user_id');
 
     const { data: profile } = await supabaseAdmin.from('profiles').select('timezone').eq('id', job.user_id).maybeSingle();
-    const timezone = profile?.timezone ?? 'UTC';
-    const dayStart = fromZonedTime(`${job.session_date}T00:00:00`, timezone).toISOString();
-    const dayEnd = fromZonedTime(`${job.session_date}T23:59:59.999`, timezone).toISOString();
+    const dayStart = fromZonedTimeSafe(`${job.session_date}T00:00:00`, profile?.timezone);
+    const dayEnd = fromZonedTimeSafe(`${job.session_date}T23:59:59.999`, profile?.timezone);
 
     const { data: clips, error } = await supabaseAdmin
       .from('clips')
@@ -62,8 +82,10 @@ export async function fetchEligibleClips(job: MontageJob): Promise<EligibleClip[
   }
 
   if (!job.group_id) throw new Error('group montage job missing group_id');
-  const dayStart = `${job.session_date}T00:00:00.000Z`;
-  const dayEnd = `${job.session_date}T23:59:59.999Z`;
+
+  const { data: group } = await supabaseAdmin.from('groups').select('timezone').eq('id', job.group_id).maybeSingle();
+  const dayStart = fromZonedTimeSafe(`${job.session_date}T00:00:00`, group?.timezone);
+  const dayEnd = fromZonedTimeSafe(`${job.session_date}T23:59:59.999`, group?.timezone);
 
   const { data: contributions, error } = await supabaseAdmin
     .from('group_contributions')

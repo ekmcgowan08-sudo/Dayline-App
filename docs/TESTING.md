@@ -51,6 +51,16 @@ All three are also wired into `.github/workflows/ci.yml`.
 - `worker_claim.test.sql` — proves `claim_next_montage_job()`'s
   concurrency safety (no double-claim, oldest-first, stale-claim
   reclamation after a simulated worker crash).
+- `entitlement_archive.test.sql` — proves `list_my_personal_montages()`
+  actually enforces the free-tier 30-day archive window server-side, and
+  that upgrading to `plus` immediately lifts it.
+- `group_timezone.test.sql` — proves `set_group_timezone()` is
+  owner/admin-only, that Postgres itself rejects an unrecognized IANA
+  zone name, and that the raw `UPDATE` gap on `groups` closed alongside
+  it is actually gone (not just removed from the UI).
+- `input_validation.test.sql` — proves the `CHECK` constraints on
+  `comments.body`/`groups.name`/`profiles.display_name` actually reject
+  over-length or whitespace-only input at the database level.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 
@@ -71,6 +81,14 @@ remaining untested step, not the SQL itself.
   tests proving the capture-scheduling engine's timezone/DST math,
   active-day filtering, pause, quiet-hour wraparound, and custom-time
   mode against real `date-fns-tz` conversions (not mocked).
+  `mobile/src/lib/__tests__/notificationDedup.test.ts` — 4 tests for
+  local/server push-notification duplicate suppression.
+  `mobile/src/lib/__tests__/crashReporting.test.ts` — 5 tests proving
+  `src/lib/crashReporting.ts`'s exports are safe no-ops with no
+  `EXPO_PUBLIC_SENTRY_DSN` set (the state this app ships in until an
+  owner configures one). The real `@sentry/react-native` SDK is mocked in
+  `mobile/jest.setup.js` — it leaves native-bridging timers open that
+  Jest can't cleanly tear down, unrelated to this app's own code.
 - **Component tests**: `mobile/src/components/ui/__tests__/Button.test.tsx`
   — press handling, disabled/loading states, accessibility state,
   rendered output, using `@testing-library/react-native` v14 (note: its
@@ -94,8 +112,12 @@ committed to the repo. It proves, by actually invoking ffmpeg and
 - Silent-audio synthesis for a clip that has none.
 - A typed `ClipRenderError` for a corrupt/unreadable file.
 - Title-card rendering with the correct duration.
+- Multi-line text-card rendering (used for the contributor-credits card).
 - Full multi-clip concatenation with a corrupt clip skipped gracefully
   (the job still succeeds).
+- The contributor-credits card and branded end card are actually
+  appended (measurable duration increase) when requested, and correctly
+  omitted when every clip fails to render (title-card-only output).
 - Both the "abort the whole job" and "no usable segments" failure paths.
 
 It does **not** exercise the Supabase download/upload/job-claim code

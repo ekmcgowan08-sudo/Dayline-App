@@ -14,10 +14,26 @@ export async function listMyGroups(userId: string): Promise<GroupWithRole[]> {
   );
 }
 
-export async function createGroup(name: string): Promise<{ ok: true; group: Group } | { ok: false; error: string }> {
-  const { data, error } = await supabase.rpc('create_group', { p_name: name });
+export async function createGroup(
+  name: string,
+  timezone: string
+): Promise<{ ok: true; group: Group } | { ok: false; error: string }> {
+  const { data, error } = await supabase.rpc('create_group', { p_name: name, p_timezone: timezone });
   if (error) return { ok: false, error: error.message };
   return { ok: true, group: data as Group };
+}
+
+const TIMEZONE_ERROR_MESSAGES: Record<string, string> = {
+  not_authorized: 'Only the group owner or an admin can change this.',
+  invalid_timezone: "That doesn't look like a valid time zone.",
+};
+
+export async function setGroupTimezone(groupId: string, timezone: string): Promise<{ error: string | null }> {
+  const { data, error } = await supabase.rpc('set_group_timezone', { p_group_id: groupId, p_timezone: timezone });
+  if (error) return { error: error.message };
+  const result = data as { ok: boolean; error?: string };
+  if (!result.ok) return { error: TIMEZONE_ERROR_MESSAGES[result.error ?? ''] ?? 'Could not update the time zone.' };
+  return { error: null };
 }
 
 const JOIN_ERROR_MESSAGES: Record<string, string> = {

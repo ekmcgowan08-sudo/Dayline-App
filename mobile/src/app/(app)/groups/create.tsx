@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View } from 'react-native';
+import * as Localization from 'expo-localization';
 import { router } from 'expo-router';
 import { spacing } from '../../../constants/theme';
 import { createGroup } from '../../../services/groups';
@@ -17,7 +18,8 @@ export default function CreateGroup() {
   async function handleCreate() {
     setLoading(true);
     setError(null);
-    const result = await createGroup(name.trim());
+    const timezone = Localization.getCalendars()[0]?.timeZone ?? 'UTC';
+    const result = await createGroup(name.trim(), timezone);
     setLoading(false);
     if (!result.ok) {
       setError(result.error);

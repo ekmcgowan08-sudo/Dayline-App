@@ -397,6 +397,99 @@ client-side hypothesis with nothing actually enforcing it.
   a free user should still get a 1-year-ago memory even with a 30-day
   general archive cap.
 
+## Phase 13 — Entitlement-gated Dayline end card
+
+Closed a gap that was subtler than the others: `ENTITLEMENT_LIMITS.free.
+daylineEndCardRequired` existed since Phase 6 but nothing in the render
+pipeline had ever read it — there was no end-card concept at all.
+
+- ✅ `worker/src/entitlements.ts`'s `getEntitlement()` reads `subscriptions`
+  directly (the worker has no `auth.uid()` as the service role, so it
+  can't call the `current_entitlement()` RPC).
+- ✅ `renderTextCard`/`endCardText` in `worker/src/render/pipeline.ts` —
+  personal montages: gated by the owner's tier. Group montages: always
+  shown (see `docs/DECISIONS.md` for why a per-member override isn't
+  attempted).
+- ✅ **Auto-verified against real ffmpeg**: `pipeline.test.ts`'s new tests
+  prove the end card/credits segments are actually appended (duration
+  grows) and are correctly *omitted* when every clip fails to render.
+
+## Phase 14 — Contributor credits card for group montages
+
+- ✅ A short credits card (one contributor name per line, capped at
+  `GROUP_LIMITS.maxActiveMembers`) is appended after the clips in a group
+  montage only — never a personal one. Built from the full eligible-clip
+  roster (`worker/src/render/runJob.ts`), not just clips that survived
+  download, so a transient download failure doesn't drop a real
+  contributor from the credits.
+- ✅ Rejected approach, documented in `docs/DECISIONS.md`: a burned-in
+  per-clip lower-third overlay, which would sit on top of someone's
+  actual footage for its whole duration.
+
+## Phase 15 — Per-group timezone for group montage day boundaries
+
+- ✅ `groups.timezone` (`20260831190000_group_timezone.sql`), owner/admin
+  settable via a new `set_group_timezone()` RPC — validated by Postgres's
+  own timezone database (`now() at time zone p_timezone`), not a regex.
+  `create_group()` also accepts an optional timezone at creation time
+  (mirrors the device-timezone-at-onboarding pattern already used for
+  personal profiles).
+- ✅ `worker/src/render/fetchEligibleClips.ts`'s group branch now uses the
+  group's own timezone for the day-boundary calculation instead of a
+  hardcoded UTC day (personal montages were already timezone-aware).
+- ✅ Mobile: group create screen passes the device timezone;
+  `groups/[id].tsx` shows the current setting to owner/admin with a
+  "use my timezone" action when it differs from the device's.
+- ✅ **Latent gap closed alongside this** (see `docs/DECISIONS.md` for the
+  full story): the pre-existing "owner or admin update group" RLS policy
+  allowed a raw `UPDATE` on the entire `groups` row with no column
+  restriction. `UPDATE` is now revoked from `authenticated` on `groups`
+  entirely — every mutation goes through a dedicated, validated RPC.
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/group_timezone.test.sql` (5 assertions) proves: owner
+  can set a valid timezone, an invalid one is rejected, a plain member is
+  refused, and — the important one — a raw `UPDATE` on `groups` is now
+  rejected outright for the `authenticated` role even for the group's own
+  owner.
+
+## Phase 16 — Input validation hardening (defense in depth)
+
+- ✅ `comments.body`, `groups.name`, and `profiles.display_name` now have
+  `CHECK` constraints (`20260831200000_input_validation_hardening.sql`)
+  matching the mobile client's existing `maxLength` values exactly —
+  closing the gap where only `reports.reason` had server-side length
+  enforcement and everything else relied on a client prop that a direct
+  API call could ignore.
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/input_validation.test.sql` (5 assertions) proves each
+  constraint actually rejects over-length or whitespace-only input at the
+  database level, not just in the UI.
+
+## Phase 17 — Crash reporting (Sentry)
+
+Previously listed under "Not required, but worth knowing about" in
+`docs/OWNER_ACTIONS_REQUIRED.md` — now a real integration, off by default.
+
+- ✅ `@sentry/react-native` is a real dependency. `mobile/src/lib/
+  crashReporting.ts` wraps `init`/`captureException`/`setUser`, every call
+  gated behind `FEATURE_FLAGS.crashReporting` (true only when
+  `EXPO_PUBLIC_SENTRY_DSN` is set) — same honest-no-op treatment as the
+  RevenueCat mock adapter, never a silent pretend-success.
+  `@sentry/react-native/expo` added to `app.json`'s plugins — verified
+  with `npx expo config --type public` (resolves cleanly; only an
+  informational warning about missing org/project, which is a build-time
+  source-map-upload detail, not a runtime one).
+- ✅ The app is wrapped in a real React error boundary
+  (`CrashReportingErrorBoundary` in `_layout.tsx`) with a proper fallback
+  screen (`src/components/CrashFallback.tsx`, "Try again") — this catches
+  and displays regardless of whether a DSN is configured, since that's
+  React's error-boundary lifecycle, not Sentry's initialization state.
+- ✅ **Auto-verified**: `mobile/src/lib/__tests__/crashReporting.test.ts`
+  (5 tests) proves every exported function is a safe no-op with no DSN
+  configured — the state this app ships in until an owner sets one.
+- 🚫 Not verified against a live Sentry project (no DSN, no network
+  egress to sentry.io in this sandbox) — see `docs/OWNER_ACTIONS_REQUIRED.md`.
+
 ---
 
 ## Environment constraints discovered this session

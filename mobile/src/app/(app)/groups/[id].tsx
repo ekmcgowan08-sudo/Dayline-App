@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, Share, View } from 'react-native';
+import * as Localization from 'expo-localization';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { spacing } from '../../../constants/theme';
 import { useAuthStore } from '../../../state/auth-store';
@@ -11,6 +12,7 @@ import {
   regenerateInviteCode,
   removeMember,
   revokeInviteCode,
+  setGroupTimezone,
   contributeClipToGroup,
   withdrawContribution,
   type MemberWithProfile,
@@ -44,9 +46,11 @@ export default function GroupDetail() {
   const [error, setError] = useState<string | null>(null);
   const [montageLoading, setMontageLoading] = useState(false);
   const [busyClipId, setBusyClipId] = useState<string | null>(null);
+  const [tzLoading, setTzLoading] = useState(false);
 
   const myMembership = members.find((m) => m.user_id === userId);
   const isOwnerOrAdmin = myMembership?.role === 'owner' || myMembership?.role === 'admin';
+  const deviceTimezone = Localization.getCalendars()[0]?.timeZone ?? 'UTC';
 
   const load = useCallback(async () => {
     if (!id || !userId) return;
@@ -133,6 +137,15 @@ export default function GroupDetail() {
     );
   }
 
+  async function handleUseMyTimezone() {
+    if (!group) return;
+    setTzLoading(true);
+    const { error } = await setGroupTimezone(group.id, deviceTimezone);
+    setTzLoading(false);
+    if (error) setError(error);
+    else load();
+  }
+
   async function handleToggleContribution(clip: Clip) {
     if (!group) return;
     setBusyClipId(clip.id);
@@ -207,6 +220,28 @@ export default function GroupDetail() {
                 <Button label="Create Our Day" onPress={handleCreateOurDay} loading={montageLoading} />
               </View>
             </Card>
+
+            {isOwnerOrAdmin ? (
+              <Card>
+                <Text variant="caption" color={theme.textSecondary}>
+                  Time zone
+                </Text>
+                <Text variant="body">{group.timezone}</Text>
+                <Text variant="caption" color={theme.textSecondary}>
+                  {'Controls what counts as "today" for Our Day. Only the owner or an admin can change this.'}
+                </Text>
+                {group.timezone !== deviceTimezone ? (
+                  <View style={{ marginTop: spacing.sm }}>
+                    <Button
+                      label={`Use my time zone (${deviceTimezone})`}
+                      variant="secondary"
+                      onPress={handleUseMyTimezone}
+                      loading={tzLoading}
+                    />
+                  </View>
+                ) : null}
+              </Card>
+            ) : null}
 
             <Text variant="heading">{"Share today's clips"}</Text>
             {todaysClips.length === 0 ? (

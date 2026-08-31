@@ -403,4 +403,93 @@ own `docs/IMPLEMENTATION_STATUS.md` phase (9, 10, 11) and
   Postgres, proving both the free-tier restriction and the plus-tier
   unlock). Total automated test count: 16 mobile + 7 worker + 14 SQL = 37.
 
+## 2026-08-31 — Second continuation pass: end card, credits, group timezone, input hardening, Sentry
+
+Asked to keep going again, this pass worked through the specific items
+flagged at the end of the previous pass (contributor identification
+on-video, per-group timezone, crash reporting) plus two things found
+while doing that work rather than invented separately.
+
+- **The "Dayline end card" requirement had never actually been wired to
+  entitlement.** `ENTITLEMENT_LIMITS.free.daylineEndCardRequired` existed
+  in `mobile/src/constants/entitlements.ts` since Phase 6 but nothing
+  read it — the render pipeline had no concept of an end card at all.
+  Fixed in `worker/src/entitlements.ts` (a worker-side `getEntitlement()`
+  that reads `subscriptions` directly, since the worker runs as the
+  service role with no `auth.uid()` and can't call the `current_entitlement()`
+  RPC) plus a new `renderTextCard`/`endCardText` option in
+  `worker/src/render/pipeline.ts`. Personal montages: gated by the
+  owner's own tier. Group montages: **always** get the end card — a
+  shared "Our Day" video has no single subscriber whose personal
+  entitlement should decide whether branding is removed for everyone
+  else in the group too. This is a deliberate simplification, not an
+  oversight; a per-member override would need real product input on
+  what "the group's plan" even means.
+- **Contributor credits are a card, not an overlay.** The product spec
+  said "tastefully identify contributors." A burned-in lower-third on
+  every clip was considered and rejected: it would sit on top of
+  someone's actual 5-second moment for its full duration, which reads as
+  more "surveillance camera timestamp" than tasteful. A short
+  contributor-credits card appended after the clips (one name per line,
+  `worker/src/render/runJob.ts`, capped at `GROUP_LIMITS.maxActiveMembers`)
+  achieves the same goal without ever occluding footage. Built from the
+  full eligible-clip roster, not just clips that survived download, so a
+  transient download failure doesn't silently drop someone from the
+  credits.
+- **Per-group timezone, and a latent gap closed alongside it.** Adding
+  `groups.timezone` (`20260831190000_group_timezone.sql`) meant touching
+  the group-mutation RLS/RPC surface for the first time since Phase 4 —
+  and turned up that the existing "owner or admin update group" policy
+  allowed a raw PostgREST `UPDATE` on the *entire* `groups` row (no
+  `WITH CHECK`, no column restriction), meaning an owner/admin could have
+  PATCHed `invite_code` or `max_members` directly, bypassing every
+  dedicated RPC written to validate those changes. No client code ever
+  exercised this (there's no "rename group" feature either), so nothing
+  observable changes for the app — but it's exactly the kind of gap that
+  should be closed the moment it's noticed, not carried forward. Fixed by
+  revoking `UPDATE` on `groups` from `authenticated` entirely and adding
+  `set_group_timezone()` as a dedicated, validated RPC alongside the
+  existing ones. Timezone validation is real: `now() at time zone
+  p_timezone` is Postgres's own IANA database, not a regex approximating
+  one.
+- **Input validation hardening, found the same way.** Auditing "what
+  could an owner/admin still do via a raw API call" for the group work
+  prompted the same question for the rest of the schema: `comments.body`,
+  `groups.name`, and `profiles.display_name` all had client-side
+  `maxLength` props and nothing backing them server-side (unlike
+  `reports.reason`, which got a length check in the original hardening
+  pass). Added matching `CHECK` constraints
+  (`20260831200000_input_validation_hardening.sql`) — limits mirror the
+  client's existing values exactly, so no real input this app has ever
+  produced is newly rejected.
+- **Crash reporting is a real integration, not a placeholder.**
+  `@sentry/react-native` is a real dependency with real `init`/
+  `captureException`/`setUser` calls in `mobile/src/lib/crashReporting.ts`
+  — but every call is gated behind `FEATURE_FLAGS.crashReporting`
+  (true only when `EXPO_PUBLIC_SENTRY_DSN` is set), the same no-DSN-means-
+  honest-no-op treatment as the RevenueCat mock adapter. Separately, the
+  React error boundary wrapping the app (`Sentry.ErrorBoundary`, via
+  `CrashReportingErrorBoundary`) catches and shows a real fallback screen
+  (`src/components/CrashFallback.tsx`) regardless of whether a DSN is
+  configured — that behavior comes from React's error-boundary lifecycle
+  itself, not from Sentry being initialized, so the app gets a better
+  crash experience than a raw redbox even with reporting fully off.
+  `@sentry/react-native/expo` was added to `app.json`'s plugins (verified
+  with `npx expo config --type public` — resolves cleanly, only an
+  informational warning about missing org/project, which only matters for
+  the build-time source-map upload step, not runtime behavior).
+
+Every new piece of behavior got a real, run test: 3 new worker tests
+(`pipeline.test.ts`, against real ffmpeg — multi-line text cards, credits
++ end card appended, and the empty-clips case correctly appending
+neither), 3 new SQL test files (`group_timezone.test.sql`,
+`input_validation.test.sql` — 10 assertions total, run against real
+Postgres 16) added to both `supabase/tests/run_all.sh` and
+`.github/workflows/ci.yml`, and 5 new mobile tests
+(`crashReporting.test.ts`, proving the unconfigured/no-DSN path never
+throws). `@sentry/react-native` is mocked in `mobile/jest.setup.js` the
+same way AsyncStorage already was — the real SDK leaves native-bridging
+timers open that Jest can't tear down, a known characteristic of the RN
+SDK in test environments, unrelated to this app's own code.
+
 (Further entries appended as work proceeds through later phases.)
