@@ -148,7 +148,30 @@ product spec.
 
 ## Phase 4 — Groups, group montage, reactions/comments/reports/blocks
 
-Status: not started.
+- ✅ **Groups**: create (server-side crypto-strong invite code via
+  `create_group` RPC), join by code (`join_group_by_code`, returns a
+  result object with friendly-mapped errors — invalid/expired, blocked,
+  full, rate-limited), group detail (roster with roles, invite-code
+  share/regenerate/revoke), remove member / leave / delete-group, all
+  through the atomic RPCs proven in `supabase/tests/rls_security.test.sql`
+  and `worker_claim.test.sql`.
+- ✅ **Our Day (group montage)**: per-clip opt-in "Share" toggle on the
+  group screen (writes/removes a `group_contributions` row — nothing is
+  shared implicitly), "Create Our Day" reuses the same `request-montage` /
+  reveal screen as personal montages (scope: `'group'`).
+- ✅ **Reactions & comments**: restrained 6-emoji reaction set, threaded
+  under each montage, comment length limit, author-delete and
+  moderator-delete (`moderate_delete_comment` RPC — montage owner or
+  group owner/admin only), long-press on another person's comment surfaces
+  report/block.
+- ✅ **Reports & blocks**: `reportContent`/`blockUser`/`unblockUser`
+  services wired into the montage comment UI; blocking's actual
+  enforcement lives in RLS (mutual comment/reaction hiding, blocked join
+  prevention — proven in RLS tests S8a/S8b), not just a client-side filter.
+- 🟡 Not yet built: a standalone "blocked users" management list in
+  Settings (block/report actions exist, but there's no screen yet to view/
+  undo them outside the montage comment long-press flow) — tracked for
+  Phase 5's settings work.
 
 ## Phase 5 — Memories, exports, settings, deletion, privacy
 

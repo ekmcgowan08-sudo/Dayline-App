@@ -1,18 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
-import { spacing } from '../../../constants/theme';
+import { radius, spacing } from '../../../constants/theme';
+import { useAuthStore } from '../../../state/auth-store';
 import { getMontage, getMontagePlaybackUrl, requestMontage, subscribeToMontage } from '../../../services/montages';
-import type { Montage } from '../../../types/database';
+import {
+  listComments,
+  listReactions,
+  postComment,
+  toggleReaction,
+  REACTION_EMOJIS,
+  type CommentWithAuthor,
+} from '../../../services/reactionsComments';
+import { blockUser, reportContent } from '../../../services/moderation';
+import type { Montage, Reaction } from '../../../types/database';
+import { Avatar } from '../../../components/ui/Avatar';
 import { Banner } from '../../../components/ui/Banner';
 import { Button } from '../../../components/ui/Button';
 import { LoadingState } from '../../../components/ui/LoadingState';
 import { Screen } from '../../../components/ui/Screen';
 import { Text } from '../../../components/ui/Text';
+import { TextField } from '../../../components/ui/TextField';
 import { useTheme } from '../../../hooks/use-theme';
 
 const FRIENDLY_ERRORS: Record<string, string> = {
@@ -25,12 +37,17 @@ const FRIENDLY_ERRORS: Record<string, string> = {
 export default function MontageReveal() {
   const theme = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const userId = useAuthStore((s) => s.session?.user.id);
   const [montage, setMontage] = useState<Montage | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [reactions, setReactions] = useState<Reaction[]>([]);
+  const [comments, setComments] = useState<CommentWithAuthor[]>([]);
+  const [commentText, setCommentText] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const player = useVideoPlayer(playbackUrl ?? null, (p) => {
@@ -45,6 +62,9 @@ export default function MontageReveal() {
     if (m?.status === 'ready' && !playbackUrl) {
       const result = await getMontagePlaybackUrl(id);
       if (result.ok && result.status === 'ready') setPlaybackUrl(result.url);
+      const [r, c] = await Promise.all([listReactions(id), listComments(id)]);
+      setReactions(r);
+      setComments(c);
     }
   }, [id, playbackUrl]);
 
@@ -120,6 +140,40 @@ export default function MontageReveal() {
     }
   }
 
+  async function handleToggleReaction(emoji: (typeof REACTION_EMOJIS)[number]) {
+    if (!id || !userId) return;
+    await toggleReaction(id, userId, emoji);
+    setReactions(await listReactions(id));
+  }
+
+  async function handlePostComment() {
+    if (!id || !userId || !commentText.trim()) return;
+    setPostingComment(true);
+    const { error } = await postComment(id, userId, commentText);
+    setPostingComment(false);
+    if (!error) {
+      setCommentText('');
+      setComments(await listComments(id));
+    }
+  }
+
+  function handleLongPressComment(comment: CommentWithAuthor) {
+    if (comment.user_id === userId) return;
+    Alert.alert(comment.display_name ?? 'This comment', undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Report', onPress: () => reportContent('comment', comment.id, 'reported from montage view') },
+      {
+        text: 'Block this person',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Block this person?', "You won't see each other's comments or reactions anymore.", [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Block', style: 'destructive', onPress: () => blockUser(comment.user_id) },
+          ]),
+      },
+    ]);
+  }
+
   if (loading || !montage) return <LoadingState label="Loading your day" />;
 
   if (montage.status === 'processing' || montage.status === 'retrying') {
@@ -155,26 +209,81 @@ export default function MontageReveal() {
     );
   }
 
+  const reactionCounts = REACTION_EMOJIS.map((emoji) => ({
+    emoji,
+    count: reactions.filter((r) => r.emoji === emoji).length,
+    mine: reactions.some((r) => r.emoji === emoji && r.user_id === userId),
+  })).filter((r) => r.count > 0 || true); // always show the full palette, counts optional
+
   return (
-    <View style={styles.container}>
-      {playbackUrl ? (
-        <VideoView style={StyleSheet.absoluteFill} player={player} contentFit="contain" nativeControls />
-      ) : (
-        <LoadingState label="Loading video" />
-      )}
-      <View style={styles.actions}>
-        {saveMessage ? <Banner kind="info" message={saveMessage} /> : null}
-        <View style={styles.actionRow}>
-          <Button label="Save" variant="secondary" onPress={handleSave} loading={saving} fullWidth={false} />
-          <Button label="Share" onPress={handleShare} fullWidth={false} />
-        </View>
-      </View>
-    </View>
+    <Screen padded={false}>
+      <FlatList
+        data={comments}
+        keyExtractor={(c) => c.id}
+        contentContainerStyle={{ paddingBottom: spacing.xxxl }}
+        ListHeaderComponent={
+          <View>
+            <View style={styles.videoWrap}>
+              {playbackUrl ? (
+                <VideoView style={StyleSheet.absoluteFill} player={player} contentFit="contain" nativeControls />
+              ) : (
+                <LoadingState label="Loading video" />
+              )}
+            </View>
+
+            <View style={{ padding: spacing.xl, gap: spacing.md }}>
+              {saveMessage ? <Banner kind="info" message={saveMessage} /> : null}
+              <View style={styles.actionRow}>
+                <Button label="Save" variant="secondary" onPress={handleSave} loading={saving} fullWidth={false} />
+                <Button label="Share" onPress={handleShare} fullWidth={false} />
+              </View>
+
+              <View style={styles.reactionRow}>
+                {reactionCounts.map(({ emoji, count, mine }) => (
+                  <Pressable
+                    key={emoji}
+                    onPress={() => handleToggleReaction(emoji)}
+                    style={[styles.reactionChip, { borderColor: mine ? theme.accentCoral : theme.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`React with ${emoji}`}
+                  >
+                    <Text variant="body">
+                      {emoji}
+                      {count > 0 ? ` ${count}` : ''}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end' }}>
+                <View style={{ flex: 1 }}>
+                  <TextField label="Add a comment" value={commentText} onChangeText={setCommentText} maxLength={500} />
+                </View>
+                <Button label="Post" fullWidth={false} onPress={handlePostComment} loading={postingComment} disabled={!commentText.trim()} />
+              </View>
+            </View>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <Pressable onLongPress={() => handleLongPressComment(item)} style={styles.commentRow}>
+            <Avatar name={item.display_name ?? 'Someone'} url={item.avatar_url} size={32} />
+            <View style={{ flex: 1 }}>
+              <Text variant="caption" color={theme.textSecondary}>
+                {item.display_name ?? 'Someone'}
+              </Text>
+              <Text variant="body">{item.body}</Text>
+            </View>
+          </Pressable>
+        )}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  actions: { position: 'absolute', bottom: 48, left: 0, right: 0, paddingHorizontal: spacing.xl, gap: spacing.sm },
+  videoWrap: { width: '100%', aspectRatio: 9 / 16, backgroundColor: '#000' },
   actionRow: { flexDirection: 'row', gap: spacing.md, justifyContent: 'center' },
+  reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  reactionChip: { borderWidth: 1, borderRadius: radius.pill, paddingVertical: spacing.xxs, paddingHorizontal: spacing.sm },
+  commentRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
 });
