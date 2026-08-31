@@ -342,4 +342,23 @@ top-of-file comment as something to re-verify against
 https://www.revenuecat.com/docs/integrations/webhooks before relying on
 it in production, rather than presenting it as verified.
 
+## 2026-08-31 — app.json had a broken asset reference; fixed while adding real branding/EAS config
+
+**Finding:** `mobile/app.json` (from the `create-expo-app` scaffold) had
+`ios.icon: "./assets/expo.icon"`, but that asset directory was deleted
+early in this session as part of removing the Expo demo template's
+placeholder content (`docs/DECISIONS.md`'s earlier phase). This would
+have broken `expo prebuild`/EAS builds the first time anyone tried one.
+
+**Fix:** Rewrote `app.json` with real Dayline branding (name, bundle
+identifiers `com.dayline.app`, scheme `dayline`, primary color, camera/
+microphone/photo-library permission strings), config plugins for
+`expo-camera`/`expo-notifications`/`expo-media-library`/`expo-image-picker`
+with their required permission-string config, and an `extra.eas.projectId`
+placeholder (real value requires `eas init`, an owner action — see
+`docs/OWNER_ACTIONS_REQUIRED.md`). Verified with `npx expo config --type
+public`, which resolves every plugin without error — real evidence the
+config is valid, not just visually reviewed. Added `mobile/eas.json` with
+development/preview/production build profiles.
+
 (Further entries appended as work proceeds through later phases.)

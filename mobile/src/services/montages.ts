@@ -84,6 +84,15 @@ export async function getMemoriesOnThisDay(): Promise<Montage[]> {
 }
 
 export async function deletePersonalMontage(montageId: string): Promise<{ error: string | null }> {
+  // Same pattern as deleteClip: read the storage path before the row is
+  // gone so the rendered video is actually removed, not just the row.
+  const { data: montage } = await supabase.from('montages').select('storage_path').eq('id', montageId).maybeSingle();
+
   const { error } = await supabase.rpc('delete_own_personal_montage', { p_montage_id: montageId });
-  return { error: error?.message ?? null };
+  if (error) return { error: error.message };
+
+  if (montage?.storage_path) {
+    await supabase.storage.from('montages').remove([montage.storage_path]);
+  }
+  return { error: null };
 }

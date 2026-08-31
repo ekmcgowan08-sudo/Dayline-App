@@ -1,42 +1,89 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Dayline",
+    "slug": "dayline",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mobile",
+    "scheme": "dayline",
     "userInterfaceStyle": "automatic",
+    "primaryColor": "#FF7A59",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "bundleIdentifier": "com.dayline.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Dayline needs your camera to record your daily five-second moments.",
+        "NSMicrophoneUsageDescription": "Dayline needs your microphone to record audio with your clips.",
+        "NSPhotoLibraryAddUsageDescription": "Dayline can save your finished montages to your camera roll.",
+        "NSPhotoLibraryUsageDescription": "Choose a profile photo or export a montage from your library."
+      }
     },
     "android": {
+      "package": "com.dayline.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FBF4E9",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "permissions": ["CAMERA", "RECORD_AUDIO", "READ_MEDIA_IMAGES", "READ_MEDIA_VIDEO", "POST_NOTIFICATIONS"],
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+    "notification": {
+      "icon": "./assets/images/icon.png",
+      "color": "#FF7A59"
+    },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#FBF4E9",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 160
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Dayline needs your camera to record your daily five-second moments.",
+          "microphonePermission": "Dayline needs your microphone to record audio with your clips."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#FF7A59"
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Dayline can save your finished montages to your camera roll.",
+          "savePhotosPermission": "Dayline can save your finished montages to your camera roll.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a profile photo from your library."
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_REAL_EAS_PROJECT_ID"
+      }
     }
   }
 }

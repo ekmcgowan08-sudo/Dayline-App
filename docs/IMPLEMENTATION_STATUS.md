@@ -234,11 +234,80 @@ product spec.
 
 ## Phase 7 — Security hardening, tests, CI, performance, a11y
 
-Status: not started.
+- ✅ **RLS/security hardening**: see Phase 1's schema entry — all 9
+  required proofs pass against real Postgres. Added in this phase:
+  report filing is now rate-limited (20/hour) and length-validated at the
+  database layer (`20260831150000_report_hardening.sql`), consistent with
+  "basic abusive-input protection on reports."
+- ✅ **Automated tests, all genuinely run, not just written**:
+  - `supabase/tests/` — schema/RLS (9 proofs) + worker job-claim
+    concurrency (2 proofs), against real Postgres 16.
+  - `mobile/src/services/__tests__/schedule.test.ts` — 7 unit tests,
+    including real DST-boundary math.
+  - `mobile/src/components/ui/__tests__/Button.test.tsx` — 5 component
+    tests (this surfaced a real gotcha: `@testing-library/react-native`
+    v14's `render()` is async and must be awaited, or `screen` queries
+    silently see nothing — documented in `docs/TESTING.md` for whoever
+    adds the next component test).
+  - `worker/src/render/__tests__/pipeline.test.ts` — 7 tests against real
+    ffmpeg with on-the-fly synthetic fixtures.
+  - **12 mobile tests + 7 worker tests + 11 SQL proofs = 30 automated
+    tests, all passing**, plus clean `tsc --noEmit`, `eslint`, and
+    `npm run build` (worker) — all re-verified together at the end of
+    this session, not just individually when first written.
+- ✅ **CI**: `.github/workflows/ci.yml` — mobile (typecheck/lint/test),
+  worker (typecheck/build/test with real ffmpeg installed), a Docker
+  build-only job for the worker image, a Postgres-service-container job
+  running the exact same migration + RLS + job-claim SQL suites, a Deno
+  typecheck job for every Edge Function, an `npm audit --audit-level=high`
+  job (verified clean against this repo's current dependency tree — 0
+  high/critical in either package), and a `gitleaks` secret-scan job.
+  **Not verified**: this sandbox has no outbound access to
+  actions.github.com, so the workflow was validated for YAML syntax
+  (parses cleanly) and every individual command was proven correct by
+  running it directly in this session — but the workflow has never
+  actually executed on a real GitHub Actions runner.
+- ✅ **Accessibility**: `accessibilityLabel`/`accessibilityRole`/
+  `accessibilityState` used throughout interactive elements (icon-only
+  buttons, checkboxes, form fields via `TextField`'s built-in label),
+  44pt minimum touch targets (`MIN_TOUCH_TARGET` used in `Button`/
+  `TextField`/`SettingsRow`), `allowFontScaling` on all text (Dynamic
+  Type / Android font scale support), light/dark theme tokens throughout.
+  **Not done**: no explicit reduced-motion handling — reviewed and found
+  the app currently has no custom animation that would need it (relies on
+  native navigation transitions only), so `motion.reducedDuration` tokens
+  exist in `theme.ts` for future use rather than being wired to nothing;
+  no dedicated screen-reader walkthrough was performed (would need a
+  device/simulator).
+- 🚫 **Performance**: no profiling was done (needs a device/simulator);
+  the render worker's single-job-at-a-time design and its resource
+  implications are discussed in its own README.
 
 ## Phase 8 — Deployment config, launch docs, final audit
 
-Status: not started.
+- ✅ All required documentation written: `README.md`, `ARCHITECTURE.md`,
+  `PRODUCT.md`, `ROADMAP.md`, `COSTS.md` (dated, sourced against current
+  2026 vendor pricing pages), `LAUNCH_CHECKLIST.md`,
+  `docs/IMPLEMENTATION_STATUS.md` (this file), `docs/DECISIONS.md`,
+  `docs/SECURITY.md`, `docs/PRIVACY_DATA_FLOW.md`, `docs/TESTING.md`,
+  `docs/DEPLOYMENT.md`, `docs/OWNER_ACTIONS_REQUIRED.md`,
+  `docs/STORE_SUBMISSION.md`, `docs/MODERATION_RUNBOOK.md`,
+  `docs/ASSET_LICENSES.md`, plus `TERMS.md`/`PRIVACY.md`/
+  `COMMUNITY_RULES.md`/`docs/LEGAL_DRAFTS.md` (DMCA, data deletion,
+  subscription disclosures, App Store/Play privacy labels, COPPA/age
+  analysis) — every item the task's documentation checklist named.
+- ✅ `mobile/app.json`/`mobile/eas.json`: real branding, permission
+  strings, config plugins, EAS build profiles — see the DECISIONS.md
+  entry for the broken-asset-reference bug this also fixed.
+- ✅ Every cost estimate is dated (2026-08-31), sourced with links, and
+  explicitly labeled as directional, not guaranteed.
+- ✅ Every unverified claim in this file and its companions is labeled
+  with a verification tier (Auto/Sim/Device/ProdCreds) — see
+  `docs/TESTING.md`'s "genuinely NOT verified" section for the single
+  consolidated list.
+- ✅ `docs/OWNER_ACTIONS_REQUIRED.md` consolidates every remaining
+  nondelegable item into one checklist, cross-referenced from
+  `LAUNCH_CHECKLIST.md`.
 
 ---
 

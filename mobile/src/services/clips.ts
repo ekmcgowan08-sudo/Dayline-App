@@ -162,6 +162,16 @@ export async function getSignedClipUrl(storagePath: string): Promise<string | nu
 }
 
 export async function deleteClip(clipId: string): Promise<{ error: string | null }> {
+  // Fetch the storage path first (RLS still allows reading it before the
+  // soft-delete below), so the underlying video is actually removed from
+  // storage, not just hidden by the deleted_at filter.
+  const { data: clip } = await supabase.from('clips').select('storage_path').eq('id', clipId).maybeSingle();
+
   const { error } = await supabase.rpc('delete_own_clip', { p_clip_id: clipId });
-  return { error: error?.message ?? null };
+  if (error) return { error: error.message };
+
+  if (clip?.storage_path) {
+    await supabase.storage.from('clips').remove([clip.storage_path]);
+  }
+  return { error: null };
 }
