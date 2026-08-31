@@ -2,7 +2,9 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { router } from 'expo-router';
 import { alreadyShown, markShown } from '../lib/notificationDedup';
+import { getMontageIdFromNotificationData } from '../lib/notificationRouting';
 import { supabase } from '../lib/supabase';
 import { computeSlotTimesForDate, todayISOInTimeZone, type CaptureSchedule } from './schedule';
 
@@ -125,6 +127,21 @@ export async function syncTodaysCaptureSlots(
   }
 
   return { scheduledCount: futureSlots.length, error: upsertError?.message ?? null };
+}
+
+/**
+ * Deep-links a "Your Day Is Ready" push straight to the finished montage
+ * when tapped, instead of just opening the app to whatever screen it
+ * happens to land on. Call once at app startup; returns the subscription
+ * so the caller can clean it up on unmount. Other notification types
+ * (capture reminders) deliberately have no tap handler yet — there's
+ * nowhere more specific than "the app" for one to deep-link to.
+ */
+export function registerNotificationTapHandler(): Notifications.Subscription {
+  return Notifications.addNotificationResponseReceivedListener((response) => {
+    const montageId = getMontageIdFromNotificationData(response.notification.request.content.data);
+    if (montageId) router.push(`/(app)/montage/${montageId}`);
+  });
 }
 
 export async function cancelAllCaptureReminders(): Promise<void> {

@@ -17,9 +17,11 @@ montages, per-group timezone for group-montage day boundaries,
 defense-in-depth input length validation, Sentry crash-reporting
 scaffolding (off by default, real no-op without a DSN), automated
 data-export fulfillment (`fulfill-data-export`/`get-export-url` — no
-manual operator step, no email infrastructure needed), and CI actually
-wired up + running (it existed since early in the build but had never
-once triggered — see `docs/DECISIONS.md`), plus three
+manual operator step, no email infrastructure needed), a real
+"Your Day Is Ready" push the moment a personal montage finishes
+rendering (with tap-to-open deep linking and its own opt-out toggle),
+and CI actually wired up + running (it existed since early in the build
+but had never once triggered — see `docs/DECISIONS.md`), plus three
 `workflow_dispatch` GitHub Actions workflows that turn Actions into a
 one-click deploy path for Supabase, EAS builds, and Sentry verification
 once account credentials exist. See `docs/IMPLEMENTATION_STATUS.md` for
@@ -43,11 +45,13 @@ the exact, honest verification tier on every piece.
 
 ## Milestone 3 — Reveal & memories polish
 
-- Push notification for "Your Day Is Ready" specifically (currently the
-  reveal is pull-based — the user opens the app and sees it).
 - Richer Memories calendar/grid view beyond the current chronological
   list + search.
 - Tune the 7/30/365-day "On This Day" cadence based on real retention data.
+- Consider a "your group's day is ready" push for group montages — the
+  personal-montage push (Phase 21) deliberately doesn't extend to groups
+  yet, since "who gets notified" (everyone? just non-contributors?) is a
+  real product decision, not a technical one.
 
 ## Milestone 4 — Groups at scale
 

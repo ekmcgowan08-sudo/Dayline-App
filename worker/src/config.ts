@@ -16,4 +16,8 @@ export const config = {
   ffmpegPath: process.env.FFMPEG_PATH ?? 'ffmpeg',
   ffprobePath: process.env.FFPROBE_PATH ?? 'ffprobe',
   titleCardFontPath: process.env.TITLE_CARD_FONT_PATH ?? '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+  /** Optional — Expo's enhanced push security token, same as the
+   * EXPO_ACCESS_TOKEN send-capture-reminders' Edge Function optionally
+   * uses. Not required for basic push sending. */
+  expoAccessToken: process.env.EXPO_ACCESS_TOKEN ?? '',
 } as const;

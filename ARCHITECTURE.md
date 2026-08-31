@@ -66,6 +66,13 @@
    fetches a signed playback URL via `get-montage-url` (which re-checks
    authorization server-side — never a direct client bucket read), and
    plays it.
+5. Right after step 3 flips the row to `ready`, the worker also sends a
+   "Your Day Is Ready" push directly (`worker/src/pushNotifications.ts`)
+   — it's the only thing that knows that exact moment, so there's no
+   separate polling function to add latency. Tapping the push deep-links
+   straight to the montage (`mobile/src/lib/notificationRouting.ts` +
+   a tap listener registered in `_layout.tsx`). Personal montages only;
+   see `docs/DECISIONS.md` for why group montages don't get this yet.
 
 ## Data flow: group montage ("Our Day")
 

@@ -57,6 +57,14 @@ export async function updateMemoryNotifications(userId: string, enabled: boolean
   return { error: error?.message ?? null };
 }
 
+export async function updateMontageReadyNotifications(userId: string, enabled: boolean): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('notification_preferences')
+    .update({ montage_ready_notifications: enabled, updated_at: new Date().toISOString() })
+    .eq('user_id', userId);
+  return { error: error?.message ?? null };
+}
+
 export async function updateTranscriptionConsent(userId: string, consented: boolean): Promise<{ error: string | null }> {
   const { error } = await supabase
     .from('transcription_consents')

@@ -618,4 +618,67 @@ inheriting silently) — reviewed carefully by hand against the working
 for the real `edge-functions-typecheck` CI job (proven working in the
 prior pass) to confirm.
 
+## 2026-08-31 — "Your Day Is Ready" push, sent from the worker itself
+
+Asked to keep building and pick the next roadmap item. Chose
+Milestone 3's "push notification for 'Your Day Is Ready' specifically" —
+the reveal was pull-based only (open the app and see it), a real,
+concrete, well-scoped gap the roadmap itself had already named.
+
+**Sent from the render worker directly, not a separate polling
+function.** `send-capture-reminders` and `purge-used-clips` both exist
+because nothing else knows to act at the right moment — capture
+reminders need to fire on a schedule independent of any single request,
+and purging needs to happen periodically regardless of render activity.
+This is different: the render worker *is* the thing that knows the exact
+instant a montage becomes ready, since it's the one flipping the status
+row. A separate function polling for `status = 'ready'` rows would just
+add latency for no benefit, so `worker/src/pushNotifications.ts` sends
+the push inline, right after `runJob.ts` finalizes the montage row —
+same non-fatal-by-design treatment as the existing "mark clips used"
+step next to it (a push failure must never affect the montage the user
+already sees as ready).
+
+**Group montages deliberately excluded.** The requester already watches
+their "Our Day" render (they just tapped the button); deciding who else
+in the group should be notified — everyone? only people who didn't
+contribute? — is a real product question with no obviously-correct
+default, not a technical one. Left for Milestone 3's list rather than
+guessing.
+
+**A tap on the push should go somewhere.** Nothing in this codebase
+handled notification taps at all before this — `expo-notifications` was
+only ever used for scheduling and display. Added
+`mobile/src/lib/notificationRouting.ts` (which notification shapes
+deep-link where) and a listener registered once in `_layout.tsx`. Split
+the routing logic into its own dependency-free module for the same
+reason `notificationDedup.ts` was: `services/notifications.ts`
+transitively imports `lib/supabase.ts`, which throws at import time
+without env vars, so anything worth unit-testing has to live somewhere
+that doesn't drag that chain in.
+
+**Its own opt-out, not folded into an existing toggle.** Neither the
+capture-reminder quiet-hours settings nor `memory_notifications` are the
+right fit — quiet hours exist to avoid prompting someone to *go film
+something* at an inconvenient time, which doesn't apply to "your
+already-recorded video is ready to watch." Added
+`montage_ready_notifications` (default `true`) mirroring
+`memory_notifications`'s exact existing pattern rather than inventing a
+new one, and extended the same settings screen (renamed from
+`MemoryNotificationSettings` to `NotificationSettings` since it's no
+longer just about memories).
+
+Verified: worker typecheck/build/`node --test` (12 tests, up from 10 —
+`buildMontageReadyMessages` pulled out as a pure, testable function
+exactly like the render-pipeline helpers already are), mobile
+typecheck/lint/`jest` (26 tests, up from 21 —
+`getMontageIdFromNotificationData` covered for the well-formed case, the
+capture-reminder case that should NOT deep-link, and three malformed-input
+cases), and a fresh `run_all.sh` confirming the new migration
+(`20260831220000_montage_ready_notifications.sql`) applies cleanly
+without needing a dedicated RLS test — it adds a column to a table
+(`notification_preferences`) whose existing `for all using (auth.uid() =
+user_id)` policy already covers it, the same reasoning
+`memory_notifications` relied on before it.
+
 (Further entries appended as work proceeds through later phases.)

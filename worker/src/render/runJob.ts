@@ -5,6 +5,7 @@ import { DAYLINE_END_CARD_TEXT } from '../brand.js';
 import { config } from '../config.js';
 import { DAYLINE_END_CARD_REQUIRED_FOR_FREE, getEntitlement } from '../entitlements.js';
 import { logger } from '../logger.js';
+import { sendMontageReadyPush } from '../pushNotifications.js';
 import { supabaseAdmin } from '../supabaseAdmin.js';
 import { downloadClipToFile, uploadMontageFile } from './downloadClip.js';
 import { fetchEligibleClips, type MontageJob } from './fetchEligibleClips.js';
@@ -139,6 +140,14 @@ export async function runJob(job: MontageJob): Promise<void> {
       })
       .eq('id', job.id);
     if (updateError) throw new Error(`failed to finalize montage row: ${updateError.message}`);
+
+    // "Your Day Is Ready" push (docs/ROADMAP.md Milestone 3) — personal
+    // montages only, sent right here since this job is the only thing
+    // that knows the exact moment rendering finished. See
+    // pushNotifications.ts for why group montages are excluded.
+    if (job.kind === 'personal' && job.user_id) {
+      await sendMontageReadyPush(job.user_id, job.id);
+    }
 
     // Storage cost control (see docs/COSTS.md): once a clip has been
     // incorporated into its OWNER's OWN personal montage, the raw source

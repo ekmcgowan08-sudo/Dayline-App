@@ -4,35 +4,43 @@ import { router } from 'expo-router';
 import { spacing } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../state/auth-store';
-import { updateMemoryNotifications } from '../../../services/account';
+import { updateMemoryNotifications, updateMontageReadyNotifications } from '../../../services/account';
 import { Button } from '../../../components/ui/Button';
 import { Screen } from '../../../components/ui/Screen';
 import { Text } from '../../../components/ui/Text';
 import { useTheme } from '../../../hooks/use-theme';
 
-export default function MemoryNotificationSettings() {
+export default function NotificationSettings() {
   const theme = useTheme();
   const session = useAuthStore((s) => s.session);
-  const [enabled, setEnabled] = useState(true);
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
+  const [montageReadyEnabled, setMontageReadyEnabled] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!session) return;
     supabase
       .from('notification_preferences')
-      .select('memory_notifications')
+      .select('memory_notifications, montage_ready_notifications')
       .eq('user_id', session.user.id)
       .maybeSingle()
       .then(({ data }) => {
-        setEnabled(data?.memory_notifications ?? true);
+        setMemoryEnabled(data?.memory_notifications ?? true);
+        setMontageReadyEnabled(data?.montage_ready_notifications ?? true);
         setLoaded(true);
       });
   }, [session]);
 
-  async function toggle(value: boolean) {
+  async function toggleMemory(value: boolean) {
     if (!session) return;
-    setEnabled(value);
+    setMemoryEnabled(value);
     await updateMemoryNotifications(session.user.id, value);
+  }
+
+  async function toggleMontageReady(value: boolean) {
+    if (!session) return;
+    setMontageReadyEnabled(value);
+    await updateMontageReadyNotifications(session.user.id, value);
   }
 
   if (!loaded) return null;
@@ -40,7 +48,16 @@ export default function MemoryNotificationSettings() {
   return (
     <Screen scroll>
       <View style={{ gap: spacing.xl }}>
-        <Text variant="title">Memories</Text>
+        <Text variant="title">Notifications</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flex: 1, marginRight: spacing.md }}>
+            <Text variant="body">Your Day Is Ready</Text>
+            <Text variant="caption" color={theme.textSecondary}>
+              {"A push the moment today's montage finishes rendering, so you don't have to keep checking."}
+            </Text>
+          </View>
+          <Switch value={montageReadyEnabled} onValueChange={toggleMontageReady} accessibilityLabel="Your Day Is Ready notifications" />
+        </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flex: 1, marginRight: spacing.md }}>
             <Text variant="body">On-this-day notifications</Text>
@@ -48,7 +65,7 @@ export default function MemoryNotificationSettings() {
               A gentle nudge when a montage from a week, a month, or a year ago resurfaces.
             </Text>
           </View>
-          <Switch value={enabled} onValueChange={toggle} accessibilityLabel="On-this-day notifications" />
+          <Switch value={memoryEnabled} onValueChange={toggleMemory} accessibilityLabel="On-this-day notifications" />
         </View>
         <Button label="Back" variant="ghost" onPress={() => router.back()} />
       </View>

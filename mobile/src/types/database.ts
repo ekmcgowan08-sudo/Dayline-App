@@ -48,6 +48,7 @@ export interface NotificationPreferences {
   quiet_end: number | null;
   paused_until: ISODate | null;
   memory_notifications: boolean;
+  montage_ready_notifications: boolean;
   updated_at: ISODateTime;
 }
 

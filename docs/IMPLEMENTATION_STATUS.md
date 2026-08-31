@@ -582,6 +582,45 @@ pipeline that never needs email at all.
   auth calls (same constraint as every other Edge Function in this
   build) — that needs `deploy-supabase.yml` and a real account.
 
+## Phase 21 — "Your Day Is Ready" push notification
+
+Closed the Milestone 3 roadmap item: the montage reveal was pull-based
+only (open the app and see it).
+
+- ✅ `worker/src/pushNotifications.ts`'s `sendMontageReadyPush()` is
+  called inline from `runJob.ts` right after a **personal** montage's
+  status flips to `ready` — the worker is the only thing that knows this
+  exact moment, so there's no separate polling function or added
+  latency. Non-fatal (a push failure never affects the montage the user
+  already sees as ready), respects a new `montage_ready_notifications`
+  preference (default `true`), and cleans up `DeviceNotRegistered`
+  tokens the same way `send-capture-reminders` does.
+- ✅ Deliberately **not** sent for group montages — see `docs/DECISIONS.md`
+  for why (a real "who gets notified" product question, not solved by
+  guessing a default).
+- ✅ Tap-to-open deep linking: `mobile/src/lib/notificationRouting.ts`
+  (which notification shapes navigate where — pulled out as a
+  dependency-free module for the same reason `notificationDedup.ts` was)
+  + a listener registered once in `_layout.tsx`. This is the first
+  notification-tap handling of any kind in this codebase — previously
+  nothing happened beyond the OS opening the app.
+- ✅ Settings → Notifications (renamed from the memories-only screen)
+  now has its own toggle, mirroring `memory_notifications`'s exact
+  existing pattern.
+- ✅ **Auto-verified**: `worker/src/__tests__/pushNotifications.test.ts`
+  (2 tests — `buildMontageReadyMessages` pulled out as a pure function,
+  same treatment as the render-pipeline helpers) and
+  `mobile/src/lib/__tests__/notificationRouting.test.ts` (5 tests —
+  the well-formed case, the capture-reminder case that must NOT
+  deep-link, and three malformed-input cases). Worker: 12/12 passing
+  (was 10). Mobile: 26/26 passing (was 21).
+- ✅ New migration (`20260831220000_montage_ready_notifications.sql`)
+  confirmed applying cleanly via a fresh `run_all.sh` — no dedicated RLS
+  test needed, since it only adds a column to a table whose existing
+  `for all using (auth.uid() = user_id)` policy already covers it.
+- 🚫 Not exercised against a live Expo push send or a real device (same
+  constraint as every push-related piece in this build).
+
 ---
 
 ## Environment constraints discovered this session
