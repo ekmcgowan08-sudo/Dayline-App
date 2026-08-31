@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { spacing } from '../../../constants/theme';
+import { shiftMonth } from '../../../lib/calendarGrid';
 import { useAuthStore } from '../../../state/auth-store';
 import {
   deletePersonalMontage,
@@ -14,12 +15,14 @@ import type { Montage } from '../../../types/database';
 import { Card } from '../../../components/ui/Card';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { LoadingState } from '../../../components/ui/LoadingState';
+import { MemoriesCalendar } from '../../../components/MemoriesCalendar';
 import { Screen } from '../../../components/ui/Screen';
 import { Text } from '../../../components/ui/Text';
 import { TextField } from '../../../components/ui/TextField';
 import { useTheme } from '../../../hooks/use-theme';
 
 type Filter = 'all' | 'personal' | 'group';
+type ViewMode = 'list' | 'calendar';
 
 export default function Memories() {
   const theme = useTheme();
@@ -30,6 +33,10 @@ export default function Memories() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const now = useMemo(() => new Date(), []);
+  const [calendarMonth, setCalendarMonth] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -54,9 +61,16 @@ export default function Memories() {
     ];
     return items
       .filter((i) => filter === 'all' || i.kind === filter)
-      .filter((i) => !search.trim() || i.date.includes(search.trim()) || i.label.toLowerCase().includes(search.trim().toLowerCase()))
+      .filter((i) =>
+        viewMode === 'calendar'
+          ? !selectedDate || i.date === selectedDate
+          : !search.trim() || i.date.includes(search.trim()) || i.label.toLowerCase().includes(search.trim().toLowerCase())
+      )
       .sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [personal, groupMontages, filter, search]);
+  }, [personal, groupMontages, filter, search, viewMode, selectedDate]);
+
+  const personalDates = useMemo(() => new Set(personal.map((m) => m.session_date)), [personal]);
+  const groupDates = useMemo(() => new Set(groupMontages.map((m) => m.session_date)), [groupMontages]);
 
   function handleDeletePersonal(montageId: string) {
     Alert.alert('Delete this day?', 'This removes the montage permanently.', [
@@ -96,7 +110,42 @@ export default function Memories() {
           </Card>
         ) : null}
 
-        <TextField label="Search by date or group" value={search} onChangeText={setSearch} placeholder="e.g. 2026-08" />
+        <View style={{ flexDirection: 'row', gap: spacing.xs }}>
+          {(['list', 'calendar'] as ViewMode[]).map((v) => (
+            <Pressable
+              key={v}
+              onPress={() => setViewMode(v)}
+              style={{
+                paddingVertical: spacing.xxs,
+                paddingHorizontal: spacing.sm,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: viewMode === v ? theme.accentSky : theme.border,
+              }}
+            >
+              <Text variant="caption" color={viewMode === v ? theme.accentSky : theme.textSecondary}>
+                {v === 'list' ? 'List' : 'Calendar'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {viewMode === 'calendar' ? (
+          <MemoriesCalendar
+            year={calendarMonth.year}
+            month={calendarMonth.month}
+            personalDates={personalDates}
+            groupDates={groupDates}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            onNavigateMonth={(offset) => {
+              setCalendarMonth((prev) => shiftMonth(prev.year, prev.month, offset));
+              setSelectedDate(null);
+            }}
+          />
+        ) : (
+          <TextField label="Search by date or group" value={search} onChangeText={setSearch} placeholder="e.g. 2026-08" />
+        )}
 
         <View style={{ flexDirection: 'row', gap: spacing.xs }}>
           {(['all', 'personal', 'group'] as Filter[]).map((f) => (

@@ -24,8 +24,13 @@ and CI actually wired up + running (it existed since early in the build
 but had never once triggered — see `docs/DECISIONS.md`), plus three
 `workflow_dispatch` GitHub Actions workflows that turn Actions into a
 one-click deploy path for Supabase, EAS builds, and Sentry verification
-once account credentials exist. See `docs/IMPLEMENTATION_STATUS.md` for
-the exact, honest verification tier on every piece.
+once account credentials exist. Also since added: the same "day is
+ready" push extended to group montages (everyone but the requester,
+per `docs/DECISIONS.md`) and a real calendar/grid view for Memories
+(month grid with personal/group indicator dots, tap a day to filter the
+list to it) alongside the original chronological list. See
+`docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification tier
+on every piece.
 
 ## Milestone 2 — Production hardening
 
@@ -45,13 +50,11 @@ the exact, honest verification tier on every piece.
 
 ## Milestone 3 — Reveal & memories polish
 
-- Richer Memories calendar/grid view beyond the current chronological
-  list + search.
 - Tune the 7/30/365-day "On This Day" cadence based on real retention data.
-- Consider a "your group's day is ready" push for group montages — the
-  personal-montage push (Phase 21) deliberately doesn't extend to groups
-  yet, since "who gets notified" (everyone? just non-contributors?) is a
-  real product decision, not a technical one.
+- Consider poster-frame thumbnails for the Memories calendar/list (today
+  it shows dots and text labels, not a frame from the actual video) —
+  needs the render worker to extract and store a frame, a larger change
+  than this pass's scope.
 
 ## Milestone 4 — Groups at scale
 

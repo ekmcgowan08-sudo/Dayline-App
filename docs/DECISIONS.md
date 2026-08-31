@@ -681,4 +681,54 @@ without needing a dedicated RLS test — it adds a column to a table
 user_id)` policy already covers it, the same reasoning
 `memory_notifications` relied on before it.
 
+## 2026-08-31 — Deciding the deferred group-push question, then the Memories calendar
+
+Asked to keep building with full decision-making authority. Two items:
+finishing what Phase 21 explicitly left open, then the next concrete,
+still-unclaimed roadmap item.
+
+**"Who gets notified" for a group montage: everyone except the
+requester.** Phase 21 named the options (everyone? only
+non-contributors?) without picking one. Reasoning for the pick: a group
+montage is fundamentally a *shared* thing — the requester already knows
+it's ready because they're the one who tapped "Create Our Day" and
+watched it render, so notifying them too is noise, not information.
+"Only non-contributors" was considered and rejected: a contributor who
+added a clip that morning still doesn't know the *finished, assembled*
+video exists until they're told, same as anyone else in the group —
+contributing doesn't imply awareness of completion.
+
+**Reused the existing opt-out rather than adding a group-specific one.**
+From a recipient's point of view "a Dayline montage of mine is ready" is
+one notification type whether it's their personal day or their group's —
+introducing a second preference column/toggle for what users would
+experience as the same kind of interruption seemed like complexity
+without a real corresponding user need. Can be split later if real usage
+shows people want them independently.
+
+**Memories calendar: a toggle, not a replacement.** The original
+chronological list + search already works and some people will prefer
+scanning a list over parsing a calendar grid, especially with few
+memories — replacing it outright would be a regression for that case.
+Built as a `List`/`Calendar` view-mode toggle instead, sharing the same
+underlying filtered data and the same tap-to-open montage behavior.
+
+**No thumbnails, dots instead — a deliberate, not accidental, scope
+cut.** A month grid with an actual video frame per day is the more
+impressive version of this feature, but it needs the render worker to
+extract a poster frame (an `ffmpeg -vframes 1` pass on the finished
+montage) and a new storage path/signed-URL flow to serve it — real scope
+on top of "richer... beyond the current list," not a natural extension
+of it. Colored dots (coral = personal, sky = group, matching the app's
+existing two-accent palette) get the actual ask — browse by date,
+see at a glance which days have something — without inventing that
+infrastructure. Left in `docs/ROADMAP.md` as real, named future work
+rather than silently dropped.
+
+Verified: worker 14/14 tests (was 12 — 2 new: group message shape, and
+that both push variants share one deep-link tag so the mobile side needed
+no changes), mobile 37/37 tests (was 26 — 11 new for `calendarGrid.ts`'s
+pure month-grid math, covering every month-length edge case including
+leap-year February and both `shiftMonth` year-rollover directions).
+
 (Further entries appended as work proceeds through later phases.)

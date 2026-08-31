@@ -36,6 +36,7 @@ export type MontageJob = {
   kind: 'personal' | 'group';
   retry_count: number;
   title_card_text: string | null;
+  requested_by: string | null;
 };
 
 /**

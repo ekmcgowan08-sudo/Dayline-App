@@ -626,6 +626,50 @@ only (open the app and see it).
 - 🚫 Not exercised against a live Expo push send or a real device (same
   constraint as every push-related piece in this build).
 
+## Phase 22 — "Our Day Is Ready" push for group montages
+
+Closed the "who gets notified" product question Phase 21 deliberately
+left open: decided (see `docs/DECISIONS.md`) rather than left pending.
+
+- ✅ `sendGroupMontageReadyPush()` in `worker/src/pushNotifications.ts`:
+  every group member except whoever requested the render. Reuses the
+  same `montage_ready_notifications` opt-out as the personal push (one
+  notification type, one preference) and the same `dayline-day-ready`
+  deep-link tag, so the existing mobile tap handler needed no changes.
+  Wired into `runJob.ts` for `job.kind === 'group'`, using the montage
+  row's own `requested_by` column (already written by `request-montage`,
+  just not previously threaded through the worker's `MontageJob` type).
+- ✅ Delivery/cleanup logic shared with the personal push via a common
+  `deliverExpoMessages()` helper rather than duplicated.
+- ✅ **Auto-verified**: 2 new tests in
+  `worker/src/__tests__/pushNotifications.test.ts` (group message
+  shape includes the group name; both push variants share the same
+  deep-link tag). Worker: 14/14 passing (was 12).
+
+## Phase 23 — Richer Memories calendar/grid view
+
+Closed the last concrete Milestone 3 item.
+
+- ✅ `mobile/src/lib/calendarGrid.ts`: pure month-grid math
+  (`buildMonthGrid`, `shiftMonth`) — Sunday-first weeks, correct padding
+  for every month length including leap-year February, separately
+  testable from the component that renders it (same pattern as
+  `schedule.ts`).
+- ✅ `mobile/src/components/MemoriesCalendar.tsx`: a real month calendar
+  with prev/next navigation, personal (coral) and group (sky) dot
+  indicators per day, and tap-to-filter — selecting a marked day filters
+  the existing list below to just that date; selecting it again clears
+  the filter. List and Calendar are a toggle, not a replacement — the
+  original chronological list + search is unchanged for anyone who
+  prefers it.
+- ✅ **Auto-verified**: `mobile/src/lib/__tests__/calendarGrid.test.ts`
+  (11 tests — day counts for 31/30/28/29-day months, 7-cell weeks,
+  correct weekday alignment, YYYY-MM-DD ordering, and every `shiftMonth`
+  rollover direction). Mobile: 37/37 passing (was 26).
+- 🚫 No poster-frame thumbnails (dots + text labels only) — extracting a
+  frame from the rendered video needs worker/storage changes, left for
+  a future pass (see `docs/ROADMAP.md`).
+
 ---
 
 ## Environment constraints discovered this session
