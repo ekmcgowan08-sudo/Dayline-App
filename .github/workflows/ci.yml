@@ -99,6 +99,8 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/data_export.test.sql postgres
       - name: Run group role management test suite
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/group_role_management.test.sql postgres
+      - name: Run comment/reaction rate limit test suite
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/comment_reaction_rate_limit.test.sql postgres
 
   dependency-audit:
     name: Dependency audit (high/critical fails the build)

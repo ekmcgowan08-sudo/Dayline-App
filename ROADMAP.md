@@ -36,8 +36,13 @@ worker/storage build-out originally sketched for it (see
 admin promotion/demotion plus ownership transfer (which turned out to be
 a missing capability, not just a missing UI, and fixed a related dead
 end: an owner previously had no way to leave a group with other members
-still in it). See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest
-verification tier on every piece.
+still in it). Also since added: rate limiting on comment and reaction
+inserts (the last two user-generated-content paths that had none), via
+the same `check_rate_limit()` bucket already used everywhere else in
+this schema, added straight into their existing RLS `WITH CHECK`
+policies with no client-code change needed. See
+`docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification tier
+on every piece.
 
 ## Milestone 2 — Production hardening
 

@@ -823,4 +823,39 @@ Mobile: typecheck/lint/37 `jest` tests all clean — this phase is RPC glue
 and UI wiring, no new pure logic needing its own test, consistent with
 how every other `groups.ts` function has been treated.
 
+## Phase 26 — comment/reaction rate limiting
+
+Found while auditing every user-generated-content insert path against the
+existing `check_rate_limit()` bucket list (reports, montage requests,
+account deletion, transcription, group-join attempts): comments and
+reactions were the only two left with zero request-frequency limit —
+only length/uniqueness constraints. Both are inserted via a direct
+`.insert()` from the mobile client through an RLS `INSERT` policy, not
+through an RPC wrapper, so the trigger-vs-RPC-conversion question this
+raised was resolved by neither: `report_hardening.sql` had already
+established that an RLS `WITH CHECK` clause can call any SQL-callable
+function, so `check_rate_limit('comment-post', ...)` /
+`check_rate_limit('reaction-post', ...)` were added straight into the
+existing `WITH CHECK` expressions on `comments` and `reactions`. No
+trigger, no client-code change, no new RPC — the smallest change that
+closes the actual gap.
+
+Limits: comments 20 per 5 minutes, reactions 30 per 5 minutes, both per
+user. Reactions got the higher number because a single legitimate action
+(catching up on a group's feed) can mean reacting to many different
+montages in quick succession, while sustained comment-writing at 20/5min
+is already well past normal use. Both are tunable constants like every
+other bucket in this schema, not claimed to be the final right number.
+Deletes (un-reacting) stay unrestricted, matching every other delete
+policy in this schema — only creation is rate-limited.
+
+Verified: `supabase/tests/comment_reaction_rate_limit.test.sql`, 4
+assertions against real Postgres 16 — 20 real comment inserts succeed
+then a 21st is rejected with the RLS `insufficient_privilege` condition
+(the same failure mode S5 in `rls_security.test.sql` already proved for
+the report bucket), and the same for 30/31 on reactions. `run_all.sh`: 40
+total SQL PASS assertions. No mobile/worker code changed — this is a
+pure RLS-policy migration — so only `npm run typecheck && npm run lint`
+were re-run there to confirm no regression, not the full test suite.
+
 (Further entries appended as work proceeds through later phases.)

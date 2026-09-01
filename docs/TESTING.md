@@ -61,6 +61,12 @@ All three are also wired into `.github/workflows/ci.yml`.
 - `input_validation.test.sql` — proves the `CHECK` constraints on
   `comments.body`/`groups.name`/`profiles.display_name` actually reject
   over-length or whitespace-only input at the database level.
+- `group_role_management.test.sql` — proves owner-only admin promotion/
+  demotion and ownership transfer, including that a former owner can
+  only `leave_group()` after transferring ownership away.
+- `comment_reaction_rate_limit.test.sql` — proves the `check_rate_limit()`
+  calls embedded in the `comments`/`reactions` `INSERT` policies actually
+  block a 21st comment or 31st reaction within the same 5-minute window.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 
@@ -169,11 +175,19 @@ this flow on a simulator or device remains open work, tracked in
 - Anything requiring a camera, microphone, or physical/simulated device.
 - Any live Supabase project interaction (auth, Postgres via PostgREST,
   Storage, Edge Functions, Realtime).
-- The worker's Docker image build/run (`docker build`/`docker run` —
-  written and reviewed, not executed; no Docker daemon in this sandbox).
 - RevenueCat's real purchase/restore flow and the `revenuecat-webhook`
   payload shape (written from a web-search summary of RevenueCat's
   documented format, not confirmed against a live account or the docs
   site directly — see `docs/DECISIONS.md`).
-- GitHub Actions CI actually running on GitHub's infrastructure (the YAML
-  was validated for syntax only).
+
+Two items previously listed here turned out to be wrong, not just
+unverified, once actually checked (see `docs/DECISIONS.md`'s "CI never
+actually ran" entry) — corrected rather than left stale:
+- **The worker's Docker image build**: real, on real GitHub Actions
+  (`ci.yml`'s `worker-docker-build` job), confirmed green on 9
+  consecutive runs, not merely syntax-checked.
+- **GitHub Actions CI actually running on GitHub's infrastructure**: it
+  does — `ci.yml` had simply never been *triggered* (its push trigger
+  was scoped to `main`, but every phase of this build happened on a
+  feature branch). Now runs on every push; see the run history linked
+  from `docs/IMPLEMENTATION_STATUS.md`.

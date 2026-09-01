@@ -168,10 +168,10 @@ product spec.
   services wired into the montage comment UI; blocking's actual
   enforcement lives in RLS (mutual comment/reaction hiding, blocked join
   prevention — proven in RLS tests S8a/S8b), not just a client-side filter.
-- 🟡 Not yet built: a standalone "blocked users" management list in
-  Settings (block/report actions exist, but there's no screen yet to view/
-  undo them outside the montage comment long-press flow) — tracked for
-  Phase 5's settings work.
+- ✅ A standalone "blocked users" management list in Settings was the one
+  gap this phase flagged for Phase 5 — **built there** (Settings →
+  Privacy & data's blocked-people list, see below). Stale 🟡 corrected
+  here rather than left to imply an open gap that's actually closed.
 
 ## Phase 5 — Memories, exports, settings, deletion, privacy
 
@@ -748,6 +748,33 @@ founding owner could only ever join as plain `member`.
   new `group_role_management.test.sql` explicitly ran and passed inside
   the `database` job's own step list, not just inferred from the job's
   overall conclusion.
+
+## Phase 26 — Comment/reaction rate limiting
+
+Found while auditing every user-generated-content insert path against
+the existing `check_rate_limit()` bucket list: comments and reactions
+were the only two left with no request-frequency limit at all (reports,
+montage requests, account deletion, transcription, and group-join
+attempts all already use it).
+
+- ✅ `20260901000000_comment_reaction_rate_limiting.sql`: added
+  `check_rate_limit('comment-post', ..., 20, 300)` and
+  `check_rate_limit('reaction-post', ..., 30, 300)` directly into the
+  existing `comments`/`reactions` `INSERT` `WITH CHECK` policies —
+  reusing the exact pattern `report_hardening.sql` already established
+  (an RLS `WITH CHECK` clause can call any SQL-callable function), so no
+  trigger and no mobile client change were needed. Deletes (un-reacting)
+  stay unrestricted, matching every other delete policy in this schema.
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/comment_reaction_rate_limit.test.sql` (4 assertions)
+  proves 20 real comment inserts succeed and a 21st is rejected with the
+  RLS `insufficient_privilege` condition, and the same for 30/31 on
+  reactions. `run_all.sh` now reports 40 total SQL PASS assertions (was
+  36). Wired into CI.
+- ✅ Mobile typecheck/lint clean — no client code changed (the existing
+  `toggleReaction`/comment-posting calls already surface `error.message`
+  from a rejected insert, so a rate-limited request degrades the same
+  way any other insert failure already does).
 
 ---
 
