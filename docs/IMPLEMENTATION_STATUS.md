@@ -841,6 +841,10 @@ would always have failed with `not_authorized`.
 - ✅ No mobile/worker changes — operator-only capability with zero
   client exposure, matching `moderator_suspend_user`/
   `moderator_reinstate_user`'s own precedent.
+- ✅ **Confirmed on real CI**: run 33465218515 (the 12th consecutive
+  clean run), all 7 jobs passed, checked individually per job — the
+  new `moderator_remove_content.test.sql` explicitly ran and passed
+  inside the `database` job's own step list.
 
 ---
 
