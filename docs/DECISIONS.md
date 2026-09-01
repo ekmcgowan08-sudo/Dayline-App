@@ -890,4 +890,53 @@ tests all clean — no dedicated mobile test, matching every other
 RPC-wrapper function's existing precedent (`setGroupTimezone`,
 `setGroupMemberRole`, etc. have none either).
 
+## Phase 28 — moderator_remove_content() RPC (fixes a real bug, not just a documented gap)
+
+`docs/MODERATION_RUNBOOK.md` had documented, since the moderation system
+was first built, that there was "no equivalent moderator RPC" for
+removing a clip or montage — a moderator was expected to hand-write raw
+`UPDATE` statements against production via the service role. Closing
+that was the plan; auditing the runbook's *existing* comment-removal
+guidance while doing it surfaced something worse: the runbook claimed a
+moderator could call the in-app `moderate_delete_comment(comment_id)`
+RPC "via service role, which bypasses the ownership check entirely."
+That was never true. The function checks `auth.uid()` against the
+montage owner or a group owner/admin; a service-role caller with no
+impersonated user has `auth.uid()` = null, which matches no one — the
+call would always fail with `not_authorized`. The documented moderator
+workflow for comments was broken from the day it was written, and
+nothing had ever actually exercised it end-to-end to notice.
+
+`moderator_remove_content(target_type, target_id, reason)` fixes both:
+one service-role-only RPC (`revoke all ... from public, authenticated`,
+matching `moderator_suspend_user`'s exact precedent) covering `'clip'`,
+`'montage'`, and `'comment'`, with no ownership check at all — service
+role is the authorization, same as every other moderator-only function
+in this schema. It flips `clips.moderation_status`/
+`comments.moderation_status` to `'removed'` or `montages.status` to
+`'failed'` (`error_code = 'moderator_removed'`), and logs one
+`moderation_actions` row. Deleting the actual storage object stays a
+separate manual step, exactly as the runbook already described — it's a
+Storage API call, not a SQL statement, and folding it into this RPC
+would couple a DB transaction to a network call that could partially
+fail.
+
+Scope note: removing a clip only affects *future* renders (
+`fetchEligibleClips.ts` already filters on `moderation_status = 'ok'`
+for both personal and group montage eligibility) — it does not
+retroactively edit a montage a removed clip already rendered into.
+Documented in the runbook rather than silently assumed.
+
+Verified: `supabase/tests/moderator_remove_content.test.sql`, 6
+assertions against real Postgres 16 — each target type flips the right
+column and logs an audit row, an unsupported target type is rejected,
+and critically the comment-removal case is proven with no
+`request.jwt.claim.sub` set at all (`auth.uid()` null), which is exactly
+what would have silently failed under the old guidance. A final
+assertion proves the `authenticated` role still can't call it at all.
+`run_all.sh`: 48 total SQL PASS assertions (was 42). No mobile/worker
+changes — this is an operator-only capability with zero client
+exposure, matching `moderator_suspend_user`/`moderator_reinstate_user`'s
+own precedent of having no mobile UI.
+
 (Further entries appended as work proceeds through later phases.)

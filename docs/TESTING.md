@@ -70,6 +70,11 @@ All three are also wired into `.github/workflows/ci.yml`.
 - `group_creation_rate_limit.test.sql` — proves `create_group()`'s
   `check_rate_limit()` call actually blocks a 6th group creation within
   the same hour.
+- `moderator_remove_content.test.sql` — proves the moderator-only
+  content-removal RPC flips the right column for clip/montage/comment,
+  logs an audit row, rejects an invalid target type, works with no
+  impersonated user (the real service-role calling convention), and is
+  not callable by the `authenticated` role.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 

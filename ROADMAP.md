@@ -42,8 +42,12 @@ the same `check_rate_limit()` bucket already used everywhere else in
 this schema, added straight into their existing RLS `WITH CHECK`
 policies with no client-code change needed, plus the same for group
 creation (5/hour per user) once found to be the last unrestricted
-group-membership write path. See `docs/IMPLEMENTATION_STATUS.md` for
-the exact, honest verification tier on every piece.
+group-membership write path. Also since added: `moderator_remove_content()`,
+which turned out to fix a real bug — `docs/MODERATION_RUNBOOK.md`'s
+prior guidance for a moderator removing a comment via service role was
+never actually true (see `docs/DECISIONS.md`), not just a documented gap
+for clip/montage removal. See `docs/IMPLEMENTATION_STATUS.md` for the
+exact, honest verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

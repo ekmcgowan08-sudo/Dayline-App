@@ -805,6 +805,43 @@ group-membership write path with no rate limit.
   new `group_creation_rate_limit.test.sql` explicitly ran and passed
   inside the `database` job's own step list.
 
+## Phase 28 — moderator_remove_content() RPC (real bug fix, not just a gap)
+
+`docs/MODERATION_RUNBOOK.md` documented "no equivalent moderator RPC"
+for clip/montage removal since the moderation system was first built.
+Auditing that gap surfaced a worse one: the runbook's existing
+comment-removal guidance ("call `moderate_delete_comment` via service
+role, which bypasses the ownership check entirely") was never actually
+true — that function checks `auth.uid()` against the montage owner/group
+admin, and a service-role caller with no impersonated user has
+`auth.uid()` = null, so the documented moderator workflow for comments
+would always have failed with `not_authorized`.
+
+- ✅ `20260901020000_moderator_remove_content.sql`:
+  `moderator_remove_content(target_type, target_id, reason)`,
+  service-role-only (`revoke all ... from public, authenticated`,
+  matching `moderator_suspend_user`'s exact precedent), covering
+  `'clip'`, `'montage'`, and `'comment'` with no ownership check at all
+  — service role is the authorization. Flips
+  `clips.moderation_status`/`comments.moderation_status` to `'removed'`
+  or `montages.status` to `'failed'`
+  (`error_code = 'moderator_removed'`), logs one `moderation_actions`
+  row. Storage-object deletion stays a separate manual step (a Storage
+  API call, not SQL).
+- ✅ `docs/MODERATION_RUNBOOK.md` updated: the triage process now points
+  at this one RPC for all three target types, with an explicit
+  correction note about the previous broken guidance.
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/moderator_remove_content.test.sql` (6 assertions)
+  proves each target type flips the right column and logs an audit row,
+  an unsupported target type is rejected, the comment case succeeds with
+  no `request.jwt.claim.sub` set at all (the real bug this migration
+  fixes), and the `authenticated` role still can't call it. `run_all.sh`
+  now reports 48 total SQL PASS assertions (was 42). Wired into CI.
+- ✅ No mobile/worker changes — operator-only capability with zero
+  client exposure, matching `moderator_suspend_user`/
+  `moderator_reinstate_user`'s own precedent.
+
 ---
 
 ## Environment constraints discovered this session

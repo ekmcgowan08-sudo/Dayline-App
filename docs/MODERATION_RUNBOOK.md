@@ -42,14 +42,33 @@ in the meantime.
    - **Minor/first offense** → warn (log a `moderation_actions` row with
      action `warn`; no automated warning delivery exists yet — this is a
      manual outreach step for now).
-   - **Content violates the rules** → remove it. For a comment, use the
-     `moderate_delete_comment(comment_id)` RPC (already callable by the
-     content owner/group owner-admin in-app — a moderator uses the same
-     function via service role, which bypasses the ownership check
-     entirely). For a clip/montage, there is no equivalent moderator RPC
-     yet — remove the storage object directly and set
-     `clips.moderation_status = 'removed'` / `montages.status = 'failed'`
-     with an appropriate `error_code`, then log a `moderation_actions` row.
+   - **Content violates the rules** → remove it:
+     ```sql
+     select moderator_remove_content('clip' | 'montage' | 'comment', '<target-id>', 'reason text here');
+     ```
+     This RPC (service-role-only) flips `clips.moderation_status`/
+     `comments.moderation_status` to `'removed'` or `montages.status` to
+     `'failed'` (with `error_code = 'moderator_removed'`) and logs the
+     `moderation_actions` row itself — one call, one audit entry,
+     regardless of target type. Removing a clip also excludes it from
+     any *future* render (`fetchEligibleClips.ts` already filters on
+     `moderation_status = 'ok'`); it does not retroactively edit a
+     montage a removed clip already rendered into — remove that montage
+     too if it needs to come down.
+
+     For a clip or montage, also delete the underlying storage object
+     directly via the service role (the same access the render worker
+     has) — a separate manual step, since it's a Storage API call, not
+     a SQL statement.
+
+     (Superseded guidance, corrected here: this document previously said
+     a moderator could call the in-app `moderate_delete_comment(comment_id)`
+     RPC "via service role, which bypasses the ownership check entirely."
+     That was never actually true — the function checks `auth.uid()`
+     against the montage owner/group admin, and a service-role caller
+     with no impersonated user has `auth.uid()` = null, so that call
+     would always fail with `not_authorized`. `moderator_remove_content`
+     is the real fix, not just a convenience wrapper.)
    - **Serious/repeat violation** → suspend the account:
      ```sql
      select moderator_suspend_user('<user-id>', 'reason text here');
