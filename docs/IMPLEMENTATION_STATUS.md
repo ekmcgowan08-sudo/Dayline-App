@@ -743,6 +743,11 @@ founding owner could only ever join as plain `member`.
   dedicated mobile-side tests — this is RPC-calling glue plus UI wiring,
   matching every other `groups.ts` function's existing precedent; the
   real verification is the SQL suite above).
+- ✅ **Confirmed on real CI**: run 33463779367 (the 9th consecutive
+  clean run), all 7 jobs passed, checked individually per job — the
+  new `group_role_management.test.sql` explicitly ran and passed inside
+  the `database` job's own step list, not just inferred from the job's
+  overall conclusion.
 
 ---
 
