@@ -949,6 +949,12 @@ a real money-adjacent correctness risk, not cosmetic.
   `edge-functions-typecheck` job is the real verification for the
   TypeScript.
 - ✅ No mobile/worker changes; no new deployment step or env var.
+- ✅ **Confirmed on real CI**: run 33570089182 (the 16th consecutive
+  clean run), all 7 jobs passed, checked individually per job —
+  `edge-functions-typecheck`'s "Type-check every function" step
+  explicitly confirms `revenuecat-webhook/index.ts` compiles cleanly,
+  the one job this phase's change couldn't be verified against locally
+  (no `deno` in this sandbox).
 
 ---
 
