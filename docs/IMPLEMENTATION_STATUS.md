@@ -894,6 +894,10 @@ expectation, not a cosmetic one.
   revoking it clears the caption for that user only. `run_all.sh` now
   reports 57 total SQL PASS assertions (was 54). Wired into CI.
 - ✅ No mobile/worker changes — trigger-based, no client code to touch.
+- ✅ **Confirmed on real CI**: run 33465738863 (the 14th consecutive
+  clean run), all 7 jobs passed, checked individually per job — the
+  new `clear_captions_on_consent_revoke.test.sql` explicitly ran and
+  passed inside the `database` job's own step list.
 
 ---
 
