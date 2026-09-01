@@ -1,0 +1,17 @@
+-- revenuecat-webhook had no protection against a redelivered/out-of-order
+-- webhook event overwriting a subscription with stale data — a real
+-- correctness risk for the only writer of an entitlement-bearing table,
+-- found auditing the webhook handler for the same class of bug the
+-- moderation RPCs turned out to have (a documented/assumed guarantee
+-- that the code didn't actually enforce). Webhook senders generally
+-- retry on transient failures and don't guarantee delivery order, so a
+-- delayed retry of an older event (e.g. a CANCELLATION from before an
+-- upgrade) arriving after a newer one must not downgrade someone who's
+-- since become an active paying subscriber.
+--
+-- last_event_at records the timestamp of the most recently *applied*
+-- event (RevenueCat's event.purchased_at_ms, the only per-event
+-- timestamp already in this function's payload type) so the Edge
+-- Function can skip an incoming event older than what's already
+-- recorded, rather than blindly applying whatever arrives last.
+alter table subscriptions add column if not exists last_event_at timestamptz;

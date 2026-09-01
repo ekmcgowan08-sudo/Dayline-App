@@ -54,6 +54,20 @@ Deno.serve(async (req) => {
   if (!event?.app_user_id || !event.type) return json({ error: 'malformed_event' }, 400);
 
   const admin = adminClient();
+
+  // Webhook senders generally retry on transient failures with no
+  // delivery-order guarantee. A redelivered older event (e.g. a stale
+  // CANCELLATION retry arriving after a newer upgrade already applied)
+  // must not overwrite a subscription with stale data — see the
+  // migration comment on subscriptions.last_event_at.
+  const incomingEventAt = event.purchased_at_ms ? new Date(event.purchased_at_ms) : null;
+  if (incomingEventAt) {
+    const { data: existing } = await admin.from('subscriptions').select('last_event_at').eq('user_id', event.app_user_id).maybeSingle();
+    if (existing?.last_event_at && new Date(existing.last_event_at) > incomingEventAt) {
+      return json({ ok: true, skipped: 'stale_event' });
+    }
+  }
+
   const hasPlus = (event.entitlement_ids ?? []).includes(ENTITLEMENT_ID_PLUS);
   const expired = EXPIRING_EVENT_TYPES.has(event.type);
 
@@ -67,6 +81,7 @@ Deno.serve(async (req) => {
     period_type: (event.period_type?.toLowerCase() as 'normal' | 'trial' | 'intro' | 'grace' | undefined) ?? null,
     expires_at: event.expiration_at_ms ? new Date(event.expiration_at_ms).toISOString() : null,
     will_renew: !expired,
+    ...(incomingEventAt ? { last_event_at: incomingEventAt.toISOString() } : {}),
     updated_at: new Date().toISOString(),
   });
 

@@ -55,8 +55,11 @@ consent now actually clears existing captions (a trigger on
 had previously documented as accepted rather than fixed; and
 `moderator_warn_user()`, closing out the moderation system's last
 inconsistency (every other moderator action was already a uniform
-RPC). See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest
-verification tier on every piece.
+RPC); and out-of-order-event protection on `revenuecat-webhook` — the
+only writer of `subscriptions` had no guard against a redelivered
+stale event downgrading an active subscriber. See
+`docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
+tier on every piece.
 
 ## Milestone 2 — Production hardening
 

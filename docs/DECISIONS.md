@@ -1028,4 +1028,42 @@ and the `authenticated` role can't call it. `run_all.sh`: 59 total SQL
 PASS assertions (was 57). No mobile/worker changes — operator-only,
 same as every other moderator RPC.
 
+## Phase 32 — revenuecat-webhook out-of-order event protection
+
+Found auditing the webhook handler for the same class of bug the
+moderation RPCs turned out to have (Phases 28-29): a documented/assumed
+guarantee the code didn't actually enforce. `revenuecat-webhook` is the
+*only* writer of `subscriptions` — the entitlement-bearing table a
+client can never self-grant (S6) — and it had no protection against a
+redelivered or out-of-order event overwriting a subscription with stale
+data. Webhook senders generally retry on transient failures with no
+delivery-order guarantee; a delayed retry of an older event (e.g. a
+`CANCELLATION` from before an upgrade) landing after a newer one had
+already applied would silently downgrade someone who's since become an
+active paying subscriber. Real money-adjacent correctness risk, not a
+cosmetic one.
+
+Added `subscriptions.last_event_at` (the timestamp of the most recently
+*applied* event) and a check at the top of the handler: if the incoming
+event's `purchased_at_ms` is older than the stored `last_event_at`, skip
+the write entirely (`{ ok: true, skipped: 'stale_event' }`) rather than
+applying it. `purchased_at_ms` is the only per-event timestamp already
+in this function's documented payload type — using anything else would
+mean guessing at a field this sandbox still can't confirm against
+RevenueCat's live docs (see the existing verification note in
+`revenuecat-webhook/index.ts` and the "webhook payload could not be
+verified live" entry above). An event with no `purchased_at_ms` is
+still applied unconditionally (existing lenient behavior, unchanged) and
+doesn't overwrite `last_event_at` with a fabricated timestamp.
+
+Not independently unit-testable the way the SQL-side fixes this session
+have been — this is Edge Function TypeScript logic, and this sandbox has
+no live Supabase project to exercise it against (the same constraint
+documented for every other Edge Function). `supabase/tests/run_all.sh`
+confirms the migration itself applies cleanly (59 assertions, unchanged
+— a plain column addition needs no dedicated RLS/RPC test, matching how
+every other simple `add column` in this schema has been treated); CI's
+`edge-functions-typecheck` job is the real verification for the
+TypeScript, same as `fulfill-data-export`/`get-export-url` before it.
+
 (Further entries appended as work proceeds through later phases.)

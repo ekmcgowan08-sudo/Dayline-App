@@ -924,6 +924,32 @@ become a uniform state-plus-audit-log RPC over Phases 28-29 except
   `LAUNCH_CHECKLIST.md`, runs 33465974152 and 33466017447) each also
   triggered and passed their own full CI run cleanly in between.
 
+## Phase 32 — revenuecat-webhook out-of-order event protection
+
+Found auditing the webhook handler for the same class of bug the
+moderation RPCs turned out to have: `revenuecat-webhook` (the only
+writer of `subscriptions`) had no protection against a redelivered or
+out-of-order event overwriting an active subscriber with stale data —
+a real money-adjacent correctness risk, not cosmetic.
+
+- ✅ `20260901060000_webhook_event_ordering.sql`: adds
+  `subscriptions.last_event_at`.
+- ✅ `supabase/functions/revenuecat-webhook/index.ts`: before writing,
+  compares the incoming event's `purchased_at_ms` against the stored
+  `last_event_at` and skips the write (`{ ok: true, skipped:
+  'stale_event' }`) if the incoming event is older. An event with no
+  `purchased_at_ms` is still applied unconditionally (unchanged
+  behavior) and never overwrites `last_event_at` with a fabricated
+  timestamp.
+- ✅ `run_all.sh` confirms the migration applies cleanly (59 assertions,
+  unchanged — a plain column addition needs no dedicated test). Not
+  independently unit-testable beyond that: this is Edge Function logic,
+  and this sandbox has no live Supabase project to exercise it against
+  — same constraint as every other Edge Function in this repo. CI's
+  `edge-functions-typecheck` job is the real verification for the
+  TypeScript.
+- ✅ No mobile/worker changes; no new deployment step or env var.
+
 ---
 
 ## Environment constraints discovered this session
