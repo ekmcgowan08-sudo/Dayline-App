@@ -46,8 +46,11 @@ group-membership write path. Also since added: `moderator_remove_content()`,
 which turned out to fix a real bug — `docs/MODERATION_RUNBOOK.md`'s
 prior guidance for a moderator removing a comment via service role was
 never actually true (see `docs/DECISIONS.md`), not just a documented gap
-for clip/montage removal. See `docs/IMPLEMENTATION_STATUS.md` for the
-exact, honest verification tier on every piece.
+for clip/montage removal — and `moderator_resolve_report()`, closing the
+same runbook's broken `moderator_dismiss` reference and giving report
+resolution the same atomic state-plus-audit-log RPC every other
+moderation action already had. See `docs/IMPLEMENTATION_STATUS.md` for
+the exact, honest verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

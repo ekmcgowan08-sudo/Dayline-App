@@ -846,6 +846,28 @@ would always have failed with `not_authorized`.
   new `moderator_remove_content.test.sql` explicitly ran and passed
   inside the `database` job's own step list.
 
+## Phase 29 — moderator_resolve_report() RPC
+
+Same class of bug as Phase 28, found auditing the rest of the runbook:
+the triage process referenced a `moderator_dismiss` function that was
+never built, and report resolution was raw SQL with no atomic audit log.
+
+- ✅ `20260901030000_moderator_resolve_report.sql`:
+  `moderator_resolve_report(report_id, status, resolution_notes)`,
+  service-role-only, updates the report's status/resolution fields and
+  logs the matching `moderation_actions` row (`dismiss_report`/
+  `resolve_report`) in one call. Rejects an unsupported status or a
+  nonexistent report id.
+- ✅ `docs/MODERATION_RUNBOOK.md` updated: step 4 now points at this RPC;
+  the broken `moderator_dismiss` reference is gone.
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/moderator_resolve_report.test.sql` (6 assertions)
+  proves both resolution outcomes, their audit rows, rejection of an
+  unsupported status and a nonexistent report, and that the
+  `authenticated` role can't call it. `run_all.sh` now reports 54 total
+  SQL PASS assertions (was 48). Wired into CI.
+- ✅ No mobile/worker changes — operator-only capability.
+
 ---
 
 ## Environment constraints discovered this session

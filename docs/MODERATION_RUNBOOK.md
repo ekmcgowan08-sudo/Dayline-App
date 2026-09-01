@@ -36,9 +36,9 @@ in the meantime.
    a deliberately narrow, logged capability, not something to do casually.
 3. **Decide an action**, using the Community Rules (`COMMUNITY_RULES.md`)
    as the standard:
-   - **No violation** → `moderator_dismiss` (see below), reply if the
-     reporter should know why (optional; there's no in-app notification
-     wired for this yet).
+   - **No violation** → resolve the report as dismissed (see step 4
+     below), reply if the reporter should know why (optional; there's no
+     in-app notification wired for this yet).
    - **Minor/first offense** → warn (log a `moderation_actions` row with
      action `warn`; no automated warning delivery exists yet — this is a
      manual outreach step for now).
@@ -75,15 +75,27 @@ in the meantime.
      ```
      This RPC is intentionally not exposed to any client role — call it
      only via the service role.
-4. **Update the report's status**:
+4. **Resolve the report**:
    ```sql
-   update reports set status = 'actioned', resolved_by = '<moderator-user-id>',
-     resolution_notes = '...', resolved_at = now() where id = '<report-id>';
+   select moderator_resolve_report('<report-id>', 'actioned' | 'dismissed', 'resolution notes here');
    ```
-   (Or `status = 'dismissed'` for no-violation reports.)
-5. **Log the action** in `moderation_actions` for anything beyond a plain
-   dismissal — this is the audit trail that makes "what happened and why"
-   answerable later.
+   This RPC (service-role-only) updates `status`/`resolved_by`/
+   `resolution_notes`/`resolved_at` on the report and logs the matching
+   `moderation_actions` row (`dismiss_report` or `resolve_report`) in
+   the same call — previously this was a raw `UPDATE` with no audit
+   entry at all unless a moderator remembered to insert one separately,
+   and the doc's own prior reference to a `moderator_dismiss` function
+   for the no-violation case pointed at something that was never built.
+5. **Log the action** in `moderation_actions` for anything beyond report
+   resolution itself — `moderator_remove_content`/`moderator_suspend_user`/
+   `moderator_resolve_report` all already do this as part of the same
+   call, so there's nothing extra to do for those; only a plain `warn`
+   (no dedicated RPC — it's a log-only action) needs its own explicit
+   insert:
+   ```sql
+   insert into moderation_actions (actor_id, target_type, target_id, action, reason)
+     values ('<moderator-user-id>', 'user', '<user-id>', 'warn', 'reason text here');
+   ```
 
 ## Illegal content (CSAM, credible threats, etc.)
 

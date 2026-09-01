@@ -75,6 +75,11 @@ All three are also wired into `.github/workflows/ci.yml`.
   logs an audit row, rejects an invalid target type, works with no
   impersonated user (the real service-role calling convention), and is
   not callable by the `authenticated` role.
+- `moderator_resolve_report.test.sql` — proves the moderator-only
+  report-resolution RPC flips status/resolution fields and logs the
+  matching audit row for both outcomes, rejects an unsupported status
+  or a nonexistent report, and is not callable by the `authenticated`
+  role.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 

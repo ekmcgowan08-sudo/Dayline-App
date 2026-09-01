@@ -939,4 +939,38 @@ changes — this is an operator-only capability with zero client
 exposure, matching `moderator_suspend_user`/`moderator_reinstate_user`'s
 own precedent of having no mobile UI.
 
+## Phase 29 — moderator_resolve_report() RPC
+
+Found immediately after Phase 28, auditing the rest of
+`docs/MODERATION_RUNBOOK.md` for the same class of bug: the triage
+process's "No violation" bullet referenced `moderator_dismiss` (see
+below), but no such function existed anywhere in the schema and no "see
+below" section ever described one either — a broken forward reference
+that had presumably never been exercised. Report resolution itself
+(step 4) was documented as a raw `UPDATE reports SET status = ...`
+statement, with no matching `moderation_actions` audit entry unless a
+moderator remembered to insert one by hand — the only moderation action
+in this whole system without an atomic RPC tying the state change to
+its own audit log.
+
+`moderator_resolve_report(report_id, status, resolution_notes)` closes
+both: one service-role-only RPC (matching `moderator_suspend_user`/
+`moderator_remove_content`'s exact precedent) that updates
+`status`/`resolved_by`/`resolution_notes`/`resolved_at` and logs the
+matching `moderation_actions` row (`dismiss_report` for `'dismissed'`,
+`resolve_report` for `'actioned'`) in the same call. Any other status
+value raises `unsupported_status`; a nonexistent report id raises
+`not_found`.
+
+Verified: `supabase/tests/moderator_resolve_report.test.sql`, 6
+assertions against real Postgres 16 — actioned and dismissed resolutions
+both flip the right fields and log the matching audit row, an
+unsupported status and a nonexistent report are both rejected, and the
+`authenticated` role still can't call it. `run_all.sh`: 54 total SQL
+PASS assertions (was 48). No mobile/worker changes — same operator-only
+scope as `moderator_remove_content`/`moderator_suspend_user`.
+`docs/MODERATION_RUNBOOK.md` updated: the triage process's step 4 now
+points at this RPC instead of raw SQL, and the broken `moderator_dismiss`
+reference is gone.
+
 (Further entries appended as work proceeds through later phases.)
