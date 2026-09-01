@@ -916,6 +916,13 @@ become a uniform state-plus-audit-log RPC over Phases 28-29 except
   `run_all.sh` now reports 59 total SQL PASS assertions (was 57). Wired
   into CI.
 - ✅ No mobile/worker changes — operator-only capability.
+- ✅ **Confirmed on real CI**: run 33466116974, all 7 jobs passed,
+  checked individually per job — the new `moderator_warn_user.test.sql`
+  explicitly ran and passed inside the `database` job's own step list.
+  This is the 15th consecutive clean *code* run; two intervening
+  doc-only pushes (stale-claim fixes in `SECURITY.md` and
+  `LAUNCH_CHECKLIST.md`, runs 33465974152 and 33466017447) each also
+  triggered and passed their own full CI run cleanly in between.
 
 ---
 
