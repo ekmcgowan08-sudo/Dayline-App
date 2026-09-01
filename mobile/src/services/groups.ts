@@ -19,7 +19,11 @@ export async function createGroup(
   timezone: string
 ): Promise<{ ok: true; group: Group } | { ok: false; error: string }> {
   const { data, error } = await supabase.rpc('create_group', { p_name: name, p_timezone: timezone });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    const message =
+      error.message === 'rate_limited' ? "You've created a few groups already — try again in a bit." : error.message;
+    return { ok: false, error: message };
+  }
   return { ok: true, group: data as Group };
 }
 

@@ -858,4 +858,36 @@ total SQL PASS assertions. No mobile/worker code changed — this is a
 pure RLS-policy migration — so only `npm run typecheck && npm run lint`
 were re-run there to confirm no regression, not the full test suite.
 
+## Phase 27 — group creation rate limiting
+
+Found immediately after closing the comment/reaction gap: `create_group()`
+was the last group-membership write path with no rate limit at all. It's
+a `raise exception`-style RPC (unlike `join_group_by_code`'s jsonb
+`{ok, error}` return), so the check is a plain `if not
+check_rate_limit(...) then raise exception 'rate_limited'; end if;` —
+placed before the invite-code insert loop, alongside the function's
+existing `not_authenticated`/`group_name_required` validation, so a
+rejection can't roll back a real insert (nothing has been written yet at
+that point).
+
+Limit: 5 groups per hour per user — generous for legitimate use (most
+people create at most a handful of groups ever) while blocking
+unbounded group creation, which is real abuse surface: each group gets
+its own invite code, membership row, and membership-event log entry.
+`createGroup()` in `mobile/src/services/groups.ts` maps the raw
+`rate_limited` exception text to a friendly message, matching the
+mapping pattern already used for `join_group_by_code`'s and
+`set_group_member_role`'s jsonb error codes — the one other raw-raised
+code (`group_name_required`) is left as-is since the create button is
+already disabled client-side when the name is empty, so it can't
+actually be reached through the UI.
+
+Verified: `supabase/tests/group_creation_rate_limit.test.sql`, 2
+assertions against real Postgres 16 — 5 real group creations succeed
+then a 6th is rejected with the exact `rate_limited` message. `run_all.sh`:
+42 total SQL PASS assertions (was 40). Mobile: typecheck/lint/37 `jest`
+tests all clean — no dedicated mobile test, matching every other
+RPC-wrapper function's existing precedent (`setGroupTimezone`,
+`setGroupMemberRole`, etc. have none either).
+
 (Further entries appended as work proceeds through later phases.)

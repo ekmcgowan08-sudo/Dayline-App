@@ -780,6 +780,27 @@ attempts all already use it).
   new `comment_reaction_rate_limit.test.sql` explicitly ran and passed
   inside the `database` job's own step list.
 
+## Phase 27 — Group creation rate limiting
+
+Found immediately after Phase 26: `create_group()` was the last
+group-membership write path with no rate limit.
+
+- ✅ `20260901010000_group_creation_rate_limit.sql`: added
+  `check_rate_limit('create-group', ..., 5, 3600)` to `create_group()`,
+  placed before any row is written (this function raises exceptions for
+  validation rather than returning a jsonb `{ok, error}`, matching its
+  own existing `not_authenticated`/`group_name_required` checks).
+- ✅ `mobile/src/services/groups.ts`'s `createGroup()` maps the raw
+  `rate_limited` exception to a friendly message, matching the mapping
+  pattern already used for other RPC error codes elsewhere in this file.
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/group_creation_rate_limit.test.sql` (2 assertions)
+  proves 5 real group creations succeed and a 6th within the same hour
+  is rejected. `run_all.sh` now reports 42 total SQL PASS assertions
+  (was 40). Wired into CI.
+- ✅ Mobile typecheck/lint/37 `jest` tests all clean — no dedicated
+  mobile test, matching every other RPC-wrapper function's precedent.
+
 ---
 
 ## Environment constraints discovered this session

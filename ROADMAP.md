@@ -40,9 +40,10 @@ still in it). Also since added: rate limiting on comment and reaction
 inserts (the last two user-generated-content paths that had none), via
 the same `check_rate_limit()` bucket already used everywhere else in
 this schema, added straight into their existing RLS `WITH CHECK`
-policies with no client-code change needed. See
-`docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification tier
-on every piece.
+policies with no client-code change needed, plus the same for group
+creation (5/hour per user) once found to be the last unrestricted
+group-membership write path. See `docs/IMPLEMENTATION_STATUS.md` for
+the exact, honest verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

@@ -67,6 +67,9 @@ All three are also wired into `.github/workflows/ci.yml`.
 - `comment_reaction_rate_limit.test.sql` — proves the `check_rate_limit()`
   calls embedded in the `comments`/`reactions` `INSERT` policies actually
   block a 21st comment or 31st reaction within the same 5-minute window.
+- `group_creation_rate_limit.test.sql` — proves `create_group()`'s
+  `check_rate_limit()` call actually blocks a 6th group creation within
+  the same hour.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 
