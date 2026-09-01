@@ -775,6 +775,10 @@ attempts all already use it).
   `toggleReaction`/comment-posting calls already surface `error.message`
   from a rejected insert, so a rate-limited request degrades the same
   way any other insert failure already does).
+- ✅ **Confirmed on real CI**: run 33464495875 (the 10th consecutive
+  clean run), all 7 jobs passed, checked individually per job — the
+  new `comment_reaction_rate_limit.test.sql` explicitly ran and passed
+  inside the `database` job's own step list.
 
 ---
 
