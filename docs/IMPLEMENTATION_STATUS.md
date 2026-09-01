@@ -872,6 +872,29 @@ never built, and report resolution was raw SQL with no atomic audit log.
   new `moderator_resolve_report.test.sql` explicitly ran and passed
   inside the `database` job's own step list.
 
+## Phase 30 — Clear captions on consent revoke
+
+`docs/PRIVACY_DATA_FLOW.md` documented this as a known, accepted gap
+since AI captions were first built. Revisited as a real privacy
+expectation, not a cosmetic one.
+
+- ✅ `20260901040000_clear_captions_on_consent_revoke.sql`:
+  `clear_captions_on_consent_revoke()` trigger on
+  `transcription_consents`, fires `AFTER INSERT OR UPDATE ... WHEN
+  (new.consented = false)`, clears `clips.caption` and sets
+  `caption_status = 'disabled'` for that user's clips — works
+  regardless of client code, since the consent table is directly
+  client-writable (no RPC wrapper to change).
+- ✅ Gives `caption_status`'s long-unused `'disabled'` enum value (in
+  its CHECK constraint since Phase 1) a real purpose, distinguishing
+  "never captioned" from "cleared on consent revoke."
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/clear_captions_on_consent_revoke.test.sql` (3
+  assertions) proves granting consent leaves a caption untouched,
+  revoking it clears the caption for that user only. `run_all.sh` now
+  reports 57 total SQL PASS assertions (was 54). Wired into CI.
+- ✅ No mobile/worker changes — trigger-based, no client code to touch.
+
 ---
 
 ## Environment constraints discovered this session

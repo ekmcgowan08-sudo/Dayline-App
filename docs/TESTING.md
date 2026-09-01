@@ -80,6 +80,10 @@ All three are also wired into `.github/workflows/ci.yml`.
   matching audit row for both outcomes, rejects an unsupported status
   or a nonexistent report, and is not callable by the `authenticated`
   role.
+- `clear_captions_on_consent_revoke.test.sql` — proves the
+  `transcription_consents` trigger clears a user's existing captions the
+  moment they revoke AI-caption consent, leaves them untouched while
+  consent is granted, and never touches another user's captions.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 

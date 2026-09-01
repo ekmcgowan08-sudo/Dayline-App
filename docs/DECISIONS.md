@@ -973,4 +973,41 @@ scope as `moderator_remove_content`/`moderator_suspend_user`.
 points at this RPC instead of raw SQL, and the broken `moderator_dismiss`
 reference is gone.
 
+## Phase 30 — clear captions on consent revoke
+
+`docs/PRIVACY_DATA_FLOW.md` had documented this as a known, accepted gap
+since AI captions were first built: "disabling consent doesn't
+retroactively delete existing captions in this build — deleting the
+clip does... a known, documented gap for a future 'delete all my
+captions' affordance." Revisited it because it's a real privacy
+expectation, not a cosmetic one — a user who revokes consent for their
+audio being sent to a transcription provider reasonably expects the
+transcripts that resulted from that consent to go away too, not just
+that future transcription stops.
+
+`transcription_consents` is directly client-writable (`mobile/src/
+services/account.ts#updateTranscriptionConsent` does a plain
+`.upsert()`, no RPC wrapper), so a trigger — not a new RPC the client
+would need to be changed to call — is the fix that works regardless of
+how consent gets toggled. `clear_captions_on_consent_revoke()` fires
+`AFTER INSERT OR UPDATE ... WHEN (new.consented = false)` and clears
+`caption`/sets `caption_status = 'disabled'` for that user's clips.
+
+Small find along the way: `caption_status`'s CHECK constraint has
+included `'disabled'` as a valid value since the column was first added
+in Phase 1, unused anywhere in the codebase until now — this is
+plainly what it was originally meant for. Using it here (rather than
+resetting to `'none'`) lets a future UI distinguish "never captioned"
+from "was captioned, cleared because consent was revoked," which is a
+meaningfully different state to show someone.
+
+Verified: `supabase/tests/clear_captions_on_consent_revoke.test.sql`, 3
+assertions against real Postgres 16 — granting consent leaves an
+existing caption untouched, revoking it clears the caption and marks it
+`'disabled'`, and revoking one user's consent doesn't touch another
+user's captions. `run_all.sh`: 57 total SQL PASS assertions (was 54).
+No mobile/worker changes — the trigger fires regardless of client code,
+and no UI currently renders `caption`/`caption_status` at all (a
+separate, pre-existing gap, out of scope here).
+
 (Further entries appended as work proceeds through later phases.)

@@ -47,9 +47,12 @@ the finished combined video.
    only that one clip's audio).
 5. The provider's transcript is stored in `clips.caption`. Nothing about
    the video content is retained by this pipeline beyond that text.
-6. Disabling consent doesn't retroactively delete existing captions in
-   this build — deleting the clip does (see below). This is a known,
-   documented gap for a future "delete all my captions" affordance.
+6. Disabling consent retroactively clears existing captions: a
+   `transcription_consents` trigger (`clear_captions_on_consent_revoke`,
+   see `docs/DECISIONS.md`) sets `clips.caption = null` and
+   `caption_status = 'disabled'` for every one of that user's clips the
+   moment `consented` flips to `false` — not just deleting the clip does
+   (see below).
 
 **No clip is ever used to train a model** — Dayline doesn't have training
 infrastructure, and the provider abstraction sends only the single

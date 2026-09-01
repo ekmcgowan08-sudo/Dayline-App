@@ -107,6 +107,8 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/moderator_remove_content.test.sql postgres
       - name: Run moderator resolve report test suite
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/moderator_resolve_report.test.sql postgres
+      - name: Run caption consent revoke test suite
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/clear_captions_on_consent_revoke.test.sql postgres
 
   dependency-audit:
     name: Dependency audit (high/critical fails the build)
