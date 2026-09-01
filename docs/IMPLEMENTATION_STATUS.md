@@ -666,11 +666,36 @@ Closed the last concrete Milestone 3 item.
   (11 tests — day counts for 31/30/28/29-day months, 7-cell weeks,
   correct weekday alignment, YYYY-MM-DD ordering, and every `shiftMonth`
   rollover direction). Mobile: 37/37 passing (was 26).
-- 🚫 No poster-frame thumbnails (dots + text labels only) — extracting a
-  frame from the rendered video needs worker/storage changes, left for
-  a future pass (see `docs/ROADMAP.md`).
+- ✅ Poster-frame thumbnails: **superseded by Phase 24** — done without
+  the worker/storage changes originally assumed necessary.
 - ✅ **Confirmed on real CI**: run 33439576799 (the 7th consecutive
   clean run), all 7 jobs passed, checked individually per job.
+
+## Phase 24 — Poster-frame thumbnails for Memories
+
+Closed the scope cut Phase 23 flagged, and did it more cheaply than
+planned: no worker changes, no new storage bucket or migration, because
+the mobile app already had the right pattern sitting in
+`components/ClipThumbnail.tsx` for raw clips — it just hadn't been
+applied to montages yet.
+
+- ✅ `mobile/src/components/MontageThumbnail.tsx`: calls the existing
+  `getMontagePlaybackUrl()` for a signed URL, then `expo-video-thumbnails`
+  extracts a frame **on-device** — the same mechanism `ClipThumbnail`
+  already uses for raw clips, just pointed at a rendered montage instead.
+  Samples at a fixed 2.2s offset (just past the ~1.8s title card every
+  montage opens with) so the thumbnail lands on real footage, not the
+  date card.
+- ✅ Wired into both the Memories list rows and the "On this day" card —
+  the calendar grid keeps its dot indicators (a 32px cell has no room
+  for a legible frame).
+- 🚫 No dedicated test — matches the existing precedent: `ClipThumbnail`,
+  which this mirrors exactly, has none either; it's IO/rendering glue
+  over already-tested pieces (`getMontagePlaybackUrl`, the thumbnails
+  library), not new logic worth a test of its own.
+- ✅ **Auto-verified**: typecheck/lint/`jest` all clean, 37/37 mobile
+  tests still passing (no regressions — this phase touched no test-bearing
+  logic, only UI wiring).
 
 ---
 

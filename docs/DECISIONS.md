@@ -731,4 +731,49 @@ no changes), mobile 37/37 tests (was 26 — 11 new for `calendarGrid.ts`'s
 pure month-grid math, covering every month-length edge case including
 leap-year February and both `shiftMonth` year-rollover directions).
 
+## 2026-08-31 — Poster-frame thumbnails, cheaper than the plan I wrote for them
+
+Asked to keep making decisions and building. Went back to the scope cut
+`docs/ROADMAP.md` had just been given in the previous pass — "needs the
+render worker to extract and store a frame, a larger change than this
+pass's scope" — and, before starting on that build-out, checked whether
+the assumption behind it still held.
+
+**It didn't: the mobile app already solves this problem, just for a
+different asset.** `components/ClipThumbnail.tsx` (existing since early
+in this build) generates a thumbnail for a raw clip entirely on-device —
+`expo-video-thumbnails` decodes a frame locally from a signed URL, no
+server-side frame extraction, no separate image storage, no extra
+migration. A rendered montage is playable through the exact same
+signed-URL mechanism (`getMontagePlaybackUrl()`/`get-montage-url`) a raw
+clip is. There was no reason the same technique wouldn't work identically
+for montages — and it does. `MontageThumbnail.tsx` is `ClipThumbnail.tsx`
+with one different data source, not a new subsystem.
+
+This is worth recording precisely because the original plan wasn't
+wrong given what was known at the time (Phase 23 really didn't have
+budget for a worker/storage build-out) — it's that revisiting an
+assumption before executing it turned out to make the "larger change"
+unnecessary entirely. Worth the extra look before committing to the
+bigger version of a feature.
+
+**One deliberate approximation: a fixed 2.2-second sample offset**,
+not a duration-probed one. Every montage opens with a title card whose
+duration is a known constant (`pipeline.ts`'s default 1.8s), so sampling
+just past it reliably lands on real footage without needing to read the
+video's actual length first — which would mean a second network
+round-trip / decode pass for a purely cosmetic gain. Documented as a
+constant with the reasoning attached, not a magic number.
+
+**No dedicated test, on purpose** — `ClipThumbnail`, which this
+component mirrors line-for-line in structure, has never had one either.
+Both are thin IO/rendering glue over already-tested pieces (the signed-URL
+fetch, the thumbnails library); the honest thing is to match the existing
+precedent, not add asymmetric test coverage between two components that
+do the same job for two different asset types.
+
+Verified: typecheck/lint/`jest` all clean, 37/37 mobile tests still
+passing — this phase touched no logic with its own tests, only UI wiring
+reusing already-verified pieces.
+
 (Further entries appended as work proceeds through later phases.)

@@ -16,6 +16,7 @@ import { Card } from '../../../components/ui/Card';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { LoadingState } from '../../../components/ui/LoadingState';
 import { MemoriesCalendar } from '../../../components/MemoriesCalendar';
+import { MontageThumbnail } from '../../../components/MontageThumbnail';
 import { Screen } from '../../../components/ui/Screen';
 import { Text } from '../../../components/ui/Text';
 import { TextField } from '../../../components/ui/TextField';
@@ -97,15 +98,16 @@ export default function Memories() {
           <Card>
             <Text variant="bodyMedium">On this day</Text>
             {onThisDay.map((m) => (
-              <Text
+              <Pressable
                 key={m.id}
-                variant="body"
-                color={theme.accentCoral}
                 onPress={() => router.push(`/(app)/montage/${m.id}`)}
-                style={{ marginTop: spacing.xxs }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm }}
               >
-                {m.session_date} — watch again
-              </Text>
+                <MontageThumbnail montageId={m.id} size={48} />
+                <Text variant="body" color={theme.accentCoral}>
+                  {m.session_date} — watch again
+                </Text>
+              </Pressable>
             ))}
           </Card>
         ) : null}
@@ -175,11 +177,17 @@ export default function Memories() {
         ListEmptyComponent={<EmptyState title="No memories yet" message="Finished montages will show up here." />}
         renderItem={({ item }) => (
           <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-            <Pressable style={{ flex: 1 }} onPress={() => router.push(`/(app)/montage/${item.id}`)}>
-              <Text variant="bodyMedium">{item.label}</Text>
-              <Text variant="caption" color={theme.textSecondary}>
-                {item.date}
-              </Text>
+            <Pressable
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}
+              onPress={() => router.push(`/(app)/montage/${item.id}`)}
+            >
+              <MontageThumbnail montageId={item.id} size={48} />
+              <View>
+                <Text variant="bodyMedium">{item.label}</Text>
+                <Text variant="caption" color={theme.textSecondary}>
+                  {item.date}
+                </Text>
+              </View>
             </Pressable>
             {item.kind === 'personal' ? (
               <Text variant="caption" color={theme.danger} onPress={() => handleDeletePersonal(item.id)}>
