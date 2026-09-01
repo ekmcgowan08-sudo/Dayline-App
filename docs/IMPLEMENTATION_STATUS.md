@@ -800,6 +800,10 @@ group-membership write path with no rate limit.
   (was 40). Wired into CI.
 - ✅ Mobile typecheck/lint/37 `jest` tests all clean — no dedicated
   mobile test, matching every other RPC-wrapper function's precedent.
+- ✅ **Confirmed on real CI**: run 33464853976 (the 11th consecutive
+  clean run), all 7 jobs passed, checked individually per job — the
+  new `group_creation_rate_limit.test.sql` explicitly ran and passed
+  inside the `database` job's own step list.
 
 ---
 
