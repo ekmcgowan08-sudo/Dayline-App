@@ -160,8 +160,6 @@ in `docs/DECISIONS.md`:
   entry in `docs/DECISIONS.md` — there is no scheduler in this build to
   enforce a delayed purge honestly, so deletion is immediate instead of
   promising a grace period nothing enforces.
-- **Data export is request-only**, not yet auto-fulfilled — see
-  `docs/PRIVACY_DATA_FLOW.md`.
 
 ## Reporting a vulnerability
 
