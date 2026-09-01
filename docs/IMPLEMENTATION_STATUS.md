@@ -867,6 +867,10 @@ never built, and report resolution was raw SQL with no atomic audit log.
   `authenticated` role can't call it. `run_all.sh` now reports 54 total
   SQL PASS assertions (was 48). Wired into CI.
 - ✅ No mobile/worker changes — operator-only capability.
+- ✅ **Confirmed on real CI**: run 33465482074 (the 13th consecutive
+  clean run), all 7 jobs passed, checked individually per job — the
+  new `moderator_resolve_report.test.sql` explicitly ran and passed
+  inside the `database` job's own step list.
 
 ---
 
