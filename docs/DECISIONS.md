@@ -776,4 +776,51 @@ Verified: typecheck/lint/`jest` all clean, 37/37 mobile tests still
 passing — this phase touched no logic with its own tests, only UI wiring
 reusing already-verified pieces.
 
+## 2026-08-31 — Group admin promotion, and the ownership-transfer dead end it uncovered
+
+Asked to keep making decisions and building. Went to close Milestone 4's
+last item, "admin-role UI refinements (currently owner/admin have
+identical permissions... schema already distinguishes them for future
+differentiation)" — and, on inspection, found the premise slightly off:
+there was no function anywhere that could ever GRANT admin. The schema
+distinguished the roles; nothing could assign one.
+
+**Owner-only, not owner-or-admin.** Every other group-management RPC in
+this codebase (`regenerate_invite_code`, `revoke_invite_code`,
+`remove_group_member`, `set_group_timezone`) treats owner and admin as
+equally privileged. Role management itself is the one deliberate
+exception: if admins could promote other members to admin, the two tiers
+would converge on identical power within a few taps and the distinction
+this phase exists to build would immediately erode. Keeping it
+owner-gated is what makes "admin" mean something.
+
+**The outgoing owner becomes `admin`, not `member`.** Found this decision
+while building the *second* function of the phase, `transfer_group_
+ownership` — added because implementing promotion surfaced a genuine
+dead end: `leave_group()` has refused an owner who isn't a group's last
+member since Phase 4, with an error name
+(`owner_must_transfer_or_delete`) that names a capability that never
+actually existed. An owner of a group with other people in it had
+exactly one way out: delete the whole group for everyone, including
+people who never asked for that. Once transfer exists, demoting the
+outgoing owner to `member` felt like a needless second loss — they
+presumably still care enough about the group to have kept it running; a
+soft landing at `admin` respects that without leaving two owners.
+
+**Scope note:** this went a bit beyond the roadmap line's literal
+wording ("UI refinements") because the UI had nothing real to refine
+until the backend capability existed, and the ownership-transfer gap was
+directly adjacent — found by building the neighboring function, not by
+going looking for more scope. Both are now genuinely done, not
+partially.
+
+Verified: `supabase/tests/group_role_management.test.sql`, 12 assertions
+against real Postgres 16 covering both functions and their interaction
+(a former owner's `leave_group()` call only succeeds *after* transferring
+ownership away — proving the fix actually closes the gap, not just that
+the new function runs). `run_all.sh`: 36 total SQL PASS assertions.
+Mobile: typecheck/lint/37 `jest` tests all clean — this phase is RPC glue
+and UI wiring, no new pure logic needing its own test, consistent with
+how every other `groups.ts` function has been treated.
+
 (Further entries appended as work proceeds through later phases.)

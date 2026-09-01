@@ -28,12 +28,16 @@ once account credentials exist. Also since added: the same "day is
 ready" push extended to group montages (everyone but the requester,
 per `docs/DECISIONS.md`), a real calendar/grid view for Memories
 (month grid with personal/group indicator dots, tap a day to filter the
-list to it) alongside the original chronological list, and real
+list to it) alongside the original chronological list, real
 poster-frame thumbnails everywhere a montage is listed — reusing the
 on-device pattern `ClipThumbnail` already established rather than the
 worker/storage build-out originally sketched for it (see
-`docs/DECISIONS.md`). See `docs/IMPLEMENTATION_STATUS.md` for the exact,
-honest verification tier on every piece.
+`docs/DECISIONS.md`) — and, closing out Milestone 4, owner-gated group
+admin promotion/demotion plus ownership transfer (which turned out to be
+a missing capability, not just a missing UI, and fixed a related dead
+end: an owner previously had no way to leave a group with other members
+still in it). See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest
+verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 
@@ -55,11 +59,13 @@ honest verification tier on every piece.
 
 - Tune the 7/30/365-day "On This Day" cadence based on real retention data.
 
-## Milestone 4 — Groups at scale
+## Milestone 4 — Groups at scale ✅
 
-- Admin-role UI refinements (currently owner/admin have identical
-  permissions in the app; the schema already distinguishes them for
-  future differentiation).
+Admin promotion/demotion and ownership transfer, both owner-gated —
+closed in full, including a related gap found while building it (an
+owner had no way to leave a group with other members still in it short
+of deleting it for everyone). See `docs/DECISIONS.md`. No further items
+identified for this milestone; add here if real usage surfaces one.
 
 ## Milestone 5 — Monetization
 

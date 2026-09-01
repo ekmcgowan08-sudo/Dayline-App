@@ -83,9 +83,56 @@ export async function removeMember(groupId: string, targetUserId: string): Promi
   return { error: error?.message ?? null };
 }
 
+const ROLE_ERROR_MESSAGES: Record<string, string> = {
+  not_authorized: 'Only the group owner can change member roles.',
+  not_a_member: 'That person is no longer in this group.',
+  cannot_change_owner_role: "The group owner's role can't be changed here.",
+  invalid_role: 'Not a valid role.',
+};
+
+/** Owner-only — see set_group_member_role()'s own comment in
+ * 20260831230000_group_role_management.sql for why this isn't
+ * owner-or-admin like most other group-management RPCs. */
+export async function setGroupMemberRole(
+  groupId: string,
+  targetUserId: string,
+  role: 'admin' | 'member'
+): Promise<{ error: string | null }> {
+  const { data, error } = await supabase.rpc('set_group_member_role', {
+    p_group_id: groupId,
+    p_target_user_id: targetUserId,
+    p_role: role,
+  });
+  if (error) return { error: error.message };
+  const result = data as { ok: boolean; error?: string };
+  if (!result.ok) return { error: ROLE_ERROR_MESSAGES[result.error ?? ''] ?? 'Could not update that role.' };
+  return { error: null };
+}
+
 export async function leaveGroup(groupId: string): Promise<{ error: string | null }> {
   const { error } = await supabase.rpc('leave_group', { p_group_id: groupId });
   return { error: error?.message ?? null };
+}
+
+const TRANSFER_ERROR_MESSAGES: Record<string, string> = {
+  not_authorized: 'Only the group owner can transfer ownership.',
+  not_a_member: 'That person is no longer in this group.',
+  already_owner: 'That person is already the owner.',
+};
+
+/** The only way an owner can leave a group that still has other members —
+ * leave_group() refuses an owner otherwise (see
+ * 20260831230000_group_role_management.sql). The outgoing owner becomes
+ * an admin, not a plain member. */
+export async function transferGroupOwnership(groupId: string, newOwnerUserId: string): Promise<{ error: string | null }> {
+  const { data, error } = await supabase.rpc('transfer_group_ownership', {
+    p_group_id: groupId,
+    p_new_owner_id: newOwnerUserId,
+  });
+  if (error) return { error: error.message };
+  const result = data as { ok: boolean; error?: string };
+  if (!result.ok) return { error: TRANSFER_ERROR_MESSAGES[result.error ?? ''] ?? 'Could not transfer ownership.' };
+  return { error: null };
 }
 
 export async function deleteGroup(groupId: string): Promise<{ error: string | null }> {

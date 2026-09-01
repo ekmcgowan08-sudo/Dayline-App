@@ -12,7 +12,9 @@ import {
   regenerateInviteCode,
   removeMember,
   revokeInviteCode,
+  setGroupMemberRole,
   setGroupTimezone,
+  transferGroupOwnership,
   contributeClipToGroup,
   withdrawContribution,
   type MemberWithProfile,
@@ -47,9 +49,11 @@ export default function GroupDetail() {
   const [montageLoading, setMontageLoading] = useState(false);
   const [busyClipId, setBusyClipId] = useState<string | null>(null);
   const [tzLoading, setTzLoading] = useState(false);
+  const [roleBusyUserId, setRoleBusyUserId] = useState<string | null>(null);
 
   const myMembership = members.find((m) => m.user_id === userId);
   const isOwnerOrAdmin = myMembership?.role === 'owner' || myMembership?.role === 'admin';
+  const isOwner = myMembership?.role === 'owner';
   const deviceTimezone = Localization.getCalendars()[0]?.timeZone ?? 'UTC';
 
   const load = useCallback(async () => {
@@ -118,10 +122,11 @@ export default function GroupDetail() {
 
   function handleLeaveOrDelete() {
     if (!group) return;
-    const isOwner = myMembership?.role === 'owner';
     Alert.alert(
       isOwner ? 'Delete group?' : 'Leave group?',
-      isOwner ? 'This permanently deletes the group and its montages for everyone.' : "You'll need a new invite to rejoin.",
+      isOwner
+        ? "This permanently deletes the group and its montages for everyone. To leave without deleting it, make someone else the owner first — tap \"Make owner\" next to their name below."
+        : "You'll need a new invite to rejoin.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -131,6 +136,38 @@ export default function GroupDetail() {
             const { error } = isOwner ? await deleteGroup(group.id) : await leaveGroup(group.id);
             if (error) setError(error);
             else router.replace('/(app)/groups');
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleToggleAdmin(member: MemberWithProfile) {
+    if (!group) return;
+    const nextRole = member.role === 'admin' ? 'member' : 'admin';
+    setRoleBusyUserId(member.user_id);
+    const { error } = await setGroupMemberRole(group.id, member.user_id, nextRole);
+    setRoleBusyUserId(null);
+    if (error) setError(error);
+    else load();
+  }
+
+  function handleTransferOwnership(member: MemberWithProfile) {
+    if (!group) return;
+    Alert.alert(
+      'Make them the owner?',
+      `${member.display_name ?? 'This person'} becomes the owner. You'll become an admin.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Transfer',
+          style: 'destructive',
+          onPress: async () => {
+            setRoleBusyUserId(member.user_id);
+            const { error } = await transferGroupOwnership(group.id, member.user_id);
+            setRoleBusyUserId(null);
+            if (error) setError(error);
+            else load();
           },
         },
       ]
@@ -271,20 +308,47 @@ export default function GroupDetail() {
             </Text>
           </View>
         }
-        renderItem={({ item }) => (
-          <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-            <Avatar name={item.display_name ?? 'Member'} url={item.avatar_url} size={40} />
-            <View style={{ flex: 1 }}>
-              <Text variant="body">{item.display_name ?? 'Member'}</Text>
-              <Text variant="caption" color={theme.textSecondary}>
-                {item.role}
-              </Text>
-            </View>
-            {isOwnerOrAdmin && item.role !== 'owner' && item.user_id !== userId ? (
-              <Button label="Remove" variant="ghost" fullWidth={false} onPress={() => handleRemoveMember(item)} />
-            ) : null}
-          </Card>
-        )}
+        renderItem={({ item }) => {
+          const canManage = item.role !== 'owner' && item.user_id !== userId && (isOwner || isOwnerOrAdmin);
+          return (
+            <Card style={{ gap: spacing.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                <Avatar name={item.display_name ?? 'Member'} url={item.avatar_url} size={40} />
+                <View style={{ flex: 1 }}>
+                  <Text variant="body">{item.display_name ?? 'Member'}</Text>
+                  <Text variant="caption" color={theme.textSecondary}>
+                    {item.role}
+                  </Text>
+                </View>
+              </View>
+              {canManage ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+                  {isOwner && item.role !== 'owner' ? (
+                    <>
+                      <Button
+                        label={item.role === 'admin' ? 'Remove admin' : 'Make admin'}
+                        variant="ghost"
+                        fullWidth={false}
+                        loading={roleBusyUserId === item.user_id}
+                        onPress={() => handleToggleAdmin(item)}
+                      />
+                      <Button
+                        label="Make owner"
+                        variant="ghost"
+                        fullWidth={false}
+                        loading={roleBusyUserId === item.user_id}
+                        onPress={() => handleTransferOwnership(item)}
+                      />
+                    </>
+                  ) : null}
+                  {isOwnerOrAdmin ? (
+                    <Button label="Remove" variant="ghost" fullWidth={false} onPress={() => handleRemoveMember(item)} />
+                  ) : null}
+                </View>
+              ) : null}
+            </Card>
+          );
+        }}
         ListEmptyComponent={<EmptyState title="No members" />}
         ListFooterComponent={
           <View style={{ marginTop: spacing.xl }}>

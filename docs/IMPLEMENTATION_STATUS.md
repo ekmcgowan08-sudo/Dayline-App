@@ -699,6 +699,51 @@ applied to montages yet.
 - ✅ **Confirmed on real CI**: run 33463180289 (the 8th consecutive
   clean run), all 7 jobs passed, checked individually per job.
 
+## Phase 25 — Group admin promotion/demotion + ownership transfer
+
+Closed the last Milestone 4 roadmap item — "admin-role UI refinements
+(currently owner/admin have identical permissions... schema already
+distinguishes them for future differentiation)" — which turned out to
+need more than UI once actually checked: there was no function anywhere
+that could grant admin status at all. Every member past a group's
+founding owner could only ever join as plain `member`.
+
+- ✅ `set_group_member_role(p_group_id, p_target_user_id, p_role)`
+  (`20260831230000_group_role_management.sql`): **owner-only** — not
+  owner-or-admin like most other group-management RPCs, a deliberate
+  choice so admin status can't proliferate without the group's creator
+  approving each promotion (see `docs/DECISIONS.md`). Validates the
+  target is an actual member, refuses to touch the owner's own role,
+  refuses `'owner'` as a settable value.
+- ✅ `transfer_group_ownership(p_group_id, p_new_owner_id)` — found while
+  building the function above: `leave_group()` has always refused an
+  owner who isn't a group's last member
+  (`'owner_must_transfer_or_delete'`), but no function ever existed to
+  actually perform that transfer, meaning an owner of a group with other
+  people in it had exactly one way out: delete the whole group for
+  everyone. The outgoing owner becomes `admin`, not a plain member.
+- ✅ Mobile: `groups/[id].tsx`'s member rows get "Make admin"/"Remove
+  admin" and "Make owner" actions (owner-only), restructured into a
+  two-row card layout so the action buttons wrap instead of overflowing
+  horizontally. The owner's delete-group confirmation now mentions the
+  transfer option as an alternative.
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/group_role_management.test.sql` (12 assertions) proves:
+  owner can promote/demote; the owner can't change their own role or
+  grant `'owner'` through the function; an admin can't promote anyone
+  (only the owner can); a plain member can't change any role; ownership
+  transfer moves the role and demotes the outgoing owner to admin; a
+  former owner can't transfer again; transferring to a non-member is
+  rejected; and — the functional payoff — a former owner can now
+  actually call `leave_group()` successfully after transferring away,
+  where before this migration they could not. `run_all.sh` now reports
+  36 total SQL PASS assertions (was 26 at the start of this session's
+  second half). Wired into CI.
+- ✅ Mobile typecheck/lint/`jest` all clean, 37/37 still passing (no
+  dedicated mobile-side tests — this is RPC-calling glue plus UI wiring,
+  matching every other `groups.ts` function's existing precedent; the
+  real verification is the SQL suite above).
+
 ---
 
 ## Environment constraints discovered this session
