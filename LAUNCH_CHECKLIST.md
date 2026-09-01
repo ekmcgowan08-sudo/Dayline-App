@@ -26,17 +26,25 @@ for the consolidated version of the latter.
       `supabase/tests/rls_security.test.sql`
 - [x] Signed URLs only, never public buckets — proven, not just claimed
 - [x] Reporting/blocking implemented and RLS-enforced
-- [x] Rate limiting on sensitive Edge Functions and invite-code redemption
-- [x] CI configured (typecheck/lint/test/audit/secret-scan/DB tests) —
-      `.github/workflows/ci.yml` (not yet run on real GitHub infrastructure
-      in this session — see `docs/TESTING.md`)
+- [x] Rate limiting on every user-generated-content write path (invite-code
+      redemption, reports, montage requests, account deletion,
+      transcription, comments, reactions, group creation) plus sensitive
+      Edge Functions
+- [x] CI configured and actually running on real GitHub infrastructure —
+      `.github/workflows/ci.yml`, confirmed job-by-job on 14+ consecutive
+      clean runs (see `docs/IMPLEMENTATION_STATUS.md`)
 - [ ] **Owner action**: a real Supabase project provisioned and this
-      repo's migrations/functions/worker actually run against it end-to-end
+      repo's migrations/functions/worker actually run against it
+      end-to-end — `deploy-supabase.yml` (GitHub Actions) automates the
+      run once credentials exist, see `docs/OWNER_ACTIONS_REQUIRED.md`
 - [ ] **Owner action**: production secrets set (service role key, RevenueCat
       keys, OpenAI key if AI captions are enabled)
 - [ ] Real Dayline app icon/splash (currently Expo template placeholders —
       `docs/ASSET_LICENSES.md`)
-- [ ] Crash reporting wired in (not yet done — `ROADMAP.md`)
+- [x] Crash reporting scaffolding wired in (Sentry, off by default, real
+      no-op without a DSN) — `mobile/src/lib/crashReporting.ts`;
+      `verify-sentry.yml` (GitHub Actions) confirms the real round-trip
+      once a DSN exists
 
 ## Store readiness
 
