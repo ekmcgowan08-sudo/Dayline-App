@@ -52,9 +52,11 @@ resolution the same atomic state-plus-audit-log RPC every other
 moderation action already had. Also since added: revoking AI-caption
 consent now actually clears existing captions (a trigger on
 `transcription_consents`), closing a gap `docs/PRIVACY_DATA_FLOW.md`
-had previously documented as accepted rather than fixed. See
-`docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification tier
-on every piece.
+had previously documented as accepted rather than fixed; and
+`moderator_warn_user()`, closing out the moderation system's last
+inconsistency (every other moderator action was already a uniform
+RPC). See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest
+verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

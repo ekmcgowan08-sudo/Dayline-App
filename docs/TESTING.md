@@ -84,6 +84,9 @@ All three are also wired into `.github/workflows/ci.yml`.
   `transcription_consents` trigger clears a user's existing captions the
   moment they revoke AI-caption consent, leaves them untouched while
   consent is granted, and never touches another user's captions.
+- `moderator_warn_user.test.sql` — proves the moderator-only warn RPC
+  logs the expected audit row and is not callable by the `authenticated`
+  role.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 

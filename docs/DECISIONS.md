@@ -1010,4 +1010,22 @@ No mobile/worker changes — the trigger fires regardless of client code,
 and no UI currently renders `caption`/`caption_status` at all (a
 separate, pre-existing gap, out of scope here).
 
+## Phase 31 — moderator_warn_user() RPC (consistency close-out)
+
+The last inconsistency left in the moderation system: `remove_content`,
+`suspend_user`/`reinstate_user`, and `resolve_report`/`dismiss_report`
+had all become single service-role-only RPCs over Phases 28-29, each
+writing its state change and audit log together — except `warn`, which
+is log-only (no state to change) and had been left as a raw `INSERT`
+the runbook described by hand. `moderator_warn_user(user_id, reason)`
+gives it the same RPC shape purely for consistency, so "how do I log a
+moderation action" has exactly one answer regardless of which action it
+is, and the runbook's step 5 no longer needs a manual-insert carve-out.
+
+Verified: `supabase/tests/moderator_warn_user.test.sql`, 2 assertions
+against real Postgres 16 — logs the expected `moderation_actions` row,
+and the `authenticated` role can't call it. `run_all.sh`: 59 total SQL
+PASS assertions (was 57). No mobile/worker changes — operator-only,
+same as every other moderator RPC.
+
 (Further entries appended as work proceeds through later phases.)

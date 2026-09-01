@@ -899,6 +899,24 @@ expectation, not a cosmetic one.
   new `clear_captions_on_consent_revoke.test.sql` explicitly ran and
   passed inside the `database` job's own step list.
 
+## Phase 31 — moderator_warn_user() RPC (consistency close-out)
+
+The last inconsistency in the moderation system: every other action had
+become a uniform state-plus-audit-log RPC over Phases 28-29 except
+`warn`, which is log-only and had been left as a raw `INSERT`.
+
+- ✅ `20260901050000_moderator_warn_user.sql`:
+  `moderator_warn_user(user_id, reason)`, service-role-only, logs a
+  `moderation_actions` row with `action = 'warn'`.
+- ✅ `docs/MODERATION_RUNBOOK.md` updated: step 3's warn bullet and
+  step 5 both point at this RPC now.
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/moderator_warn_user.test.sql` (2 assertions) proves
+  the audit row is logged and the `authenticated` role can't call it.
+  `run_all.sh` now reports 59 total SQL PASS assertions (was 57). Wired
+  into CI.
+- ✅ No mobile/worker changes — operator-only capability.
+
 ---
 
 ## Environment constraints discovered this session

@@ -39,9 +39,13 @@ in the meantime.
    - **No violation** → resolve the report as dismissed (see step 4
      below), reply if the reporter should know why (optional; there's no
      in-app notification wired for this yet).
-   - **Minor/first offense** → warn (log a `moderation_actions` row with
-     action `warn`; no automated warning delivery exists yet — this is a
-     manual outreach step for now).
+   - **Minor/first offense** → warn:
+     ```sql
+     select moderator_warn_user('<user-id>', 'reason text here');
+     ```
+     Log-only (no automated warning delivery exists yet — this is a
+     manual outreach step for now), but goes through the same RPC
+     pattern as every other moderation action for consistency.
    - **Content violates the rules** → remove it:
      ```sql
      select moderator_remove_content('clip' | 'montage' | 'comment', '<target-id>', 'reason text here');
@@ -87,15 +91,10 @@ in the meantime.
    and the doc's own prior reference to a `moderator_dismiss` function
    for the no-violation case pointed at something that was never built.
 5. **Log the action** in `moderation_actions` for anything beyond report
-   resolution itself — `moderator_remove_content`/`moderator_suspend_user`/
-   `moderator_resolve_report` all already do this as part of the same
-   call, so there's nothing extra to do for those; only a plain `warn`
-   (no dedicated RPC — it's a log-only action) needs its own explicit
-   insert:
-   ```sql
-   insert into moderation_actions (actor_id, target_type, target_id, action, reason)
-     values ('<moderator-user-id>', 'user', '<user-id>', 'warn', 'reason text here');
-   ```
+   resolution itself — every moderation RPC in this schema
+   (`moderator_remove_content`/`moderator_suspend_user`/
+   `moderator_resolve_report`/`moderator_warn_user`) already does this
+   as part of the same call, so there's nothing extra to do manually.
 
 ## Illegal content (CSAM, credible threats, etc.)
 
