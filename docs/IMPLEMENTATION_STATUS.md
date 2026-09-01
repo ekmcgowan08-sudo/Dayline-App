@@ -696,6 +696,8 @@ applied to montages yet.
 - ✅ **Auto-verified**: typecheck/lint/`jest` all clean, 37/37 mobile
   tests still passing (no regressions — this phase touched no test-bearing
   logic, only UI wiring).
+- ✅ **Confirmed on real CI**: run 33463180289 (the 8th consecutive
+  clean run), all 7 jobs passed, checked individually per job.
 
 ---
 
