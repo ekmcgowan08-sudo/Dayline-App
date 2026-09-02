@@ -1019,6 +1019,11 @@ pill, not just a stuck job for its own requester.
   real job queued behind it. `run_all.sh` now reports 67 total SQL
   PASS assertions (was 64). Wired into CI.
 - ✅ Worker: typecheck/build/all 14 `node --test` suites clean.
+- ✅ **Confirmed on real CI**: run 33581465434 (the 18th consecutive
+  clean run), all 7 jobs passed, checked individually per job — the
+  `database` job's "Run worker job-claim test suite" step and the
+  `worker` job's typecheck/build/test steps both explicitly ran and
+  passed.
 
 ---
 
