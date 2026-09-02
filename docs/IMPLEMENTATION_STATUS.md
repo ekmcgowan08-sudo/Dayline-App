@@ -985,6 +985,10 @@ could land on a device someone else is now signed into.
   `run_all.sh` now reports 64 total SQL PASS assertions (was 59). Wired
   into CI.
 - ✅ Mobile typecheck/lint/37 `jest` tests all clean.
+- ✅ **Confirmed on real CI**: run 33579428553 (the 17th consecutive
+  clean run), all 7 jobs passed, checked individually per job — the
+  new `push_token_reassignment.test.sql` explicitly ran and passed
+  inside the `database` job's own step list.
 
 ---
 
