@@ -67,8 +67,11 @@ retry cap on the render worker's stale-claim reclaim path — a job that
 crashed the worker process itself (not a catchable exception) had no
 retry accounting at all and could starve the single-job-at-a-time
 render pipeline for every user, indefinitely, if it crashed on every
-attempt. See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest
-verification tier on every piece.
+attempt; and a fix for `send-capture-reminders` marking capture
+reminders "sent" even when the Expo push batch never actually went out
+(a network hiccup left the slot permanently unretried, contradicting
+the function's own documented intent). See `docs/IMPLEMENTATION_STATUS.md`
+for the exact, honest verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

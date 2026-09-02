@@ -90,14 +90,28 @@ Deno.serve(async (req) => {
     tokensByUser.set(t.user_id, list);
   }
 
-  const messages: { to: string; title: string; body: string; data: Record<string, unknown> }[] = [];
+  const messages: { to: string; title: string; body: string; data: Record<string, unknown>; slotId: string }[] = [];
+  // notifiedSlotIds must only ever gain entries for a slot that was
+  // actually part of a batch submitted to Expo (or had nothing to
+  // send) — never blanket-applied to every active slot regardless of
+  // outcome, which previously marked slots notified even when the push
+  // for them never went out at all (see the catch block below).
+  const notifiedSlotIds = new Set<string>();
   for (const slot of activeSlots) {
-    for (const t of tokensByUser.get(slot.user_id) ?? []) {
+    const userTokens = tokensByUser.get(slot.user_id) ?? [];
+    if (userTokens.length === 0) {
+      // Nothing to send and nothing that could transiently fail —
+      // notified in the sense that there's no work left to retry.
+      notifiedSlotIds.add(slot.id);
+      continue;
+    }
+    for (const t of userTokens) {
       messages.push({
         to: t.expo_push_token,
         title: 'Capture this moment',
         body: 'Five seconds of right now — whatever it is.',
         data: { tag: 'dayline-capture-reminder', captureSlotId: slot.id },
+        slotId: slot.id,
       });
     }
   }
@@ -117,7 +131,7 @@ Deno.serve(async (req) => {
             ? { Authorization: `Bearer ${Deno.env.get('EXPO_ACCESS_TOKEN')}` }
             : {}),
         },
-        body: JSON.stringify(batch),
+        body: JSON.stringify(batch.map((m) => ({ to: m.to, title: m.title, body: m.body, data: m.data }))),
       });
       const result = (await response.json()) as { data?: ExpoPushTicket[] };
       (result.data ?? []).forEach((ticket, idx) => {
@@ -127,10 +141,18 @@ Deno.serve(async (req) => {
           invalidTokens.push(batch[idx].to);
         }
       });
+      // The batch was actually submitted (whatever each ticket's own
+      // status — neither platform hands back a delivery receipt, the
+      // same caveat already documented for the client's local
+      // notifications above), so these slots are done, not pending retry.
+      for (const m of batch) notifiedSlotIds.add(m.slotId);
     } catch {
-      // A transient failure here just means this batch's slots won't be
-      // marked notified and will be retried on the next cron tick (still
-      // within the stale window) — no special handling needed.
+      // A transient failure here means this batch was never actually
+      // submitted to Expo at all — its slots must stay unmarked so the
+      // next cron tick retries them (still within the stale window).
+      // Previously the final update below marked them notified anyway,
+      // silently dropping the reminder for good on any transient
+      // Expo API failure.
     }
   }
 
@@ -138,10 +160,18 @@ Deno.serve(async (req) => {
     await admin.from('device_push_tokens').delete().in('expo_push_token', invalidTokens);
   }
 
-  await admin
-    .from('capture_slots')
-    .update({ notified_at: now.toISOString() })
-    .in('id', activeSlots.map((s) => s.id));
+  if (notifiedSlotIds.size > 0) {
+    await admin
+      .from('capture_slots')
+      .update({ notified_at: now.toISOString() })
+      .in('id', [...notifiedSlotIds]);
+  }
 
-  return json({ ok: true, slotsProcessed: activeSlots.length, pushesSent: sent, invalidTokensRemoved: invalidTokens.length });
+  return json({
+    ok: true,
+    slotsProcessed: notifiedSlotIds.size,
+    slotsPendingRetry: activeSlots.length - notifiedSlotIds.size,
+    pushesSent: sent,
+    invalidTokensRemoved: invalidTokens.length,
+  });
 });

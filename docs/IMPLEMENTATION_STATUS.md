@@ -1025,6 +1025,29 @@ pill, not just a stuck job for its own requester.
   `worker` job's typecheck/build/test steps both explicitly ran and
   passed.
 
+## Phase 35 — Fix send-capture-reminders silently dropping reminders on a transient Expo API failure
+
+Found by checking the function's own comment against what its code
+actually did: it claimed a failed push batch's slots "won't be marked
+notified and will be retried," but the final `capture_slots` update
+marked every active slot notified unconditionally, regardless of which
+batches actually succeeded. A single Expo API hiccup meant those users'
+reminders were marked sent and never retried, even though nothing was
+ever sent.
+
+- ✅ `supabase/functions/send-capture-reminders/index.ts`: tracks
+  `notifiedSlotIds` incrementally — a slot with no device token is
+  marked immediately (nothing to send), a slot whose batch was actually
+  submitted to Expo is marked once that `fetch()` call returns without
+  throwing, and a slot whose batch's `fetch()` threw is left unmarked
+  for the next cron tick. The response body's `slotsProcessed` now
+  reports the real count, plus a new `slotsPendingRetry` field.
+- ✅ Not independently testable beyond a manual re-read and CI's
+  `edge-functions-typecheck` — same constraint as every other
+  Edge-Function-only fix this session (no live Supabase project in
+  this sandbox). No mobile/worker/schema changes; no new deployment
+  step.
+
 ---
 
 ## Environment constraints discovered this session

@@ -1166,4 +1166,44 @@ typecheck/build/all 14 `node --test` suites still clean; no dedicated
 RPC contract it calls, which `worker_claim.test.sql` already exercises
 directly).
 
+## Phase 35 — fix send-capture-reminders silently dropping reminders on a transient Expo API failure
+
+Found by reading the function's own comment against what its code
+actually does — the exact pattern that's paid off repeatedly this
+session. The `catch` block on each Expo push batch claimed: "A
+transient failure here just means this batch's slots won't be marked
+notified and will be retried on the next cron tick." The code did not
+do that. The *final* update, after the batch loop, marked every slot in
+`activeSlots` as `notified_at` unconditionally — the full list computed
+before any batch was ever attempted, not narrowed to slots whose batch
+actually succeeded. A single network hiccup or Expo outage on any batch
+meant those users' capture reminders were marked "sent" and never
+retried, even though nothing was ever sent — a real, silent loss of the
+one thing this whole function exists to guarantee (a backup delivery
+path for a reminder the local notification might have missed).
+
+Rewrote the tracking to build `notifiedSlotIds` incrementally and
+correctly: a slot with no registered device token is marked immediately
+(nothing to send, nothing that can fail); a slot whose message batch was
+actually submitted to Expo — regardless of each ticket's individual
+`status`, since neither platform hands back a delivery receipt anyway,
+the same caveat this function's own header comment already documents for
+local notifications — is marked once that batch's `fetch()` call
+returns without throwing; a slot whose batch's `fetch()` threw is left
+unmarked, so it's picked up again on the next cron tick within the
+15-minute stale window, exactly as the original comment claimed but the
+code never delivered. The response body's `slotsProcessed` now reports
+the real count instead of the pre-computed active-slot count, and a new
+`slotsPendingRetry` field makes a partial-failure run visible in the
+function's own logs/response rather than silently indistinguishable
+from full success.
+
+Not independently testable beyond a manual re-read for correctness and
+CI's `edge-functions-typecheck` — same constraint as every other Edge
+Function fix this session (`revenuecat-webhook`'s ordering fix
+included): no live Supabase project in this sandbox to invoke it
+against for real, and Deno's push-batch/fetch logic isn't unit-testable
+the way the SQL-side fixes have been. No mobile/worker changes; no
+schema change; no new deployment step.
+
 (Further entries appended as work proceeds through later phases.)
