@@ -1066,4 +1066,54 @@ every other simple `add column` in this schema has been treated); CI's
 `edge-functions-typecheck` job is the real verification for the
 TypeScript, same as `fulfill-data-export`/`get-export-url` before it.
 
+## Phase 33 — fix push token reassignment across users on a shared device
+
+Found by testing a hypothesis directly against real Postgres rather than
+reasoning about RLS + `ON CONFLICT` semantics from memory: does
+`registerPushToken()`'s plain client-side `.upsert(..., { onConflict:
+'expo_push_token' })` actually work when a *different* user logs in on a
+device that previously registered its Expo push token under someone
+else's account? `device_push_tokens.expo_push_token` is globally unique
+by design (a physical device has one token), so this is exactly the
+borrowed-phone / shared-family-device / reinstall-new-account scenario.
+
+Verified empirically in this session (`sudo -u postgres psql` against a
+migrated local Postgres 16, the same environment every SQL test in this
+repo runs against): the upsert's `ON CONFLICT DO UPDATE` path re-checks
+the existing row's RLS `USING` clause, which fails because that row
+belongs to the *other* user, not the caller — Postgres raises `new row
+violates row-level security policy (USING expression)`, a hard error.
+Confirmed rather than assumed. The practical effect: the new user's push
+registration failed outright every time on a previously-used device, and
+the previous user's stale row kept sitting there — meaning a push meant
+for the previous account could still land on a physical device someone
+else is now signed into. A real notification-privacy leak, not just a
+registration inconvenience, and a genuinely plausible scenario for a
+private friend-group app (someone hands their phone to a friend to try
+the app, a family shares one device, a developer switches test accounts
+on one simulator).
+
+`register_push_token(expo_push_token, platform)` is a SECURITY DEFINER
+RPC — the same "wrap the cross-user side effect the table's RLS can't
+express" pattern used throughout this schema — that deletes any row
+owned by a *different* user for that token, then upserts the caller's
+own row. `mobile/src/services/notifications.ts#registerPushToken()` now
+calls the RPC instead of writing the table directly; the `userId`
+parameter is no longer read (the RPC derives the caller from `auth.uid()`
+server-side, which can't be spoofed the way a client-passed id could be)
+but the call site (`onboarding/schedule.tsx`) is left unchanged rather
+than reworking its signature for a parameter that was never trusted
+input to begin with.
+
+Verified: `supabase/tests/push_token_reassignment.test.sql`, 5 assertions
+against real Postgres 16 — proves the RPC actually reassigns a shared
+token to a new user, and includes a dedicated assertion that reproduces
+the original bug (a plain client upsert on the same scenario really does
+hit the RLS error), so the fix is proven against the real failure mode,
+not a hypothetical one. Also covers same-user re-registration (safe
+no-op, no duplicate row) and an invalid platform being rejected.
+`run_all.sh`: 64 total SQL PASS assertions (was 59). Mobile:
+typecheck/lint/37 `jest` tests all clean — no dedicated mobile test,
+matching every other RPC-wrapper service function's precedent.
+
 (Further entries appended as work proceeds through later phases.)

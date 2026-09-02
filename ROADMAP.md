@@ -55,9 +55,14 @@ consent now actually clears existing captions (a trigger on
 had previously documented as accepted rather than fixed; and
 `moderator_warn_user()`, closing out the moderation system's last
 inconsistency (every other moderator action was already a uniform
-RPC); and out-of-order-event protection on `revenuecat-webhook` — the
+RPC); out-of-order-event protection on `revenuecat-webhook` — the
 only writer of `subscriptions` had no guard against a redelivered
-stale event downgrading an active subscriber. See
+stale event downgrading an active subscriber; and a fix, verified
+empirically against real Postgres, for a device's push token failing
+to reassign when a different user logs in on it (a borrowed phone or
+shared family device previously registered under someone else's
+account) — the old registration stayed live, meaning a push meant for
+the previous account could land on that device. See
 `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

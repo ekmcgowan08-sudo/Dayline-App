@@ -47,6 +47,13 @@ export async function getNotificationPermissionStatus() {
  * Failure here (no EAS project configured yet, simulator without push
  * capability, permission denied) is non-fatal — local notifications still
  * work standalone; this only adds the server-side backup delivery path.
+ *
+ * Goes through register_push_token() rather than a direct upsert — the
+ * token column is globally unique, and a plain client-side upsert throws
+ * an RLS error whenever a different user logs in on a device that
+ * previously registered under someone else's account (borrowed phone,
+ * shared device, reinstall + new sign-in). The RPC reassigns it
+ * server-side instead of leaving a stale registration on the device.
  */
 export async function registerPushToken(userId: string): Promise<{ error: string | null }> {
   try {
@@ -59,15 +66,10 @@ export async function registerPushToken(userId: string): Promise<{ error: string
       projectId ? { projectId } : undefined
     );
 
-    const { error } = await supabase.from('device_push_tokens').upsert(
-      {
-        user_id: userId,
-        expo_push_token: expoPushToken,
-        platform: Platform.OS === 'ios' ? 'ios' : 'android',
-        last_seen_at: new Date().toISOString(),
-      },
-      { onConflict: 'expo_push_token' }
-    );
+    const { error } = await supabase.rpc('register_push_token', {
+      p_expo_push_token: expoPushToken,
+      p_platform: Platform.OS === 'ios' ? 'ios' : 'android',
+    });
     return { error: error?.message ?? null };
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'push registration failed' };

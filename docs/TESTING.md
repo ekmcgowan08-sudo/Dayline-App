@@ -87,6 +87,11 @@ All three are also wired into `.github/workflows/ci.yml`.
 - `moderator_warn_user.test.sql` — proves the moderator-only warn RPC
   logs the expected audit row and is not callable by the `authenticated`
   role.
+- `push_token_reassignment.test.sql` — proves `register_push_token()`
+  reassigns a shared device's token to a new user, including a
+  dedicated assertion that reproduces the original bug (a plain client
+  upsert on the same scenario hits an RLS error), plus safe same-user
+  re-registration and invalid-platform rejection.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 

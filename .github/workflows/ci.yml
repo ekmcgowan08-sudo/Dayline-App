@@ -111,6 +111,8 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/clear_captions_on_consent_revoke.test.sql postgres
       - name: Run moderator warn user test suite
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/moderator_warn_user.test.sql postgres
+      - name: Run push token reassignment test suite
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/push_token_reassignment.test.sql postgres
 
   dependency-audit:
     name: Dependency audit (high/critical fails the build)

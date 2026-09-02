@@ -956,6 +956,36 @@ a real money-adjacent correctness risk, not cosmetic.
   the one job this phase's change couldn't be verified against locally
   (no `deno` in this sandbox).
 
+## Phase 33 — Fix push token reassignment across users on a shared device
+
+Found by testing a hypothesis empirically against real Postgres rather
+than reasoning from RLS + `ON CONFLICT` documentation: a different user
+logging in on a device that previously registered its Expo push token
+under someone else's account hit an RLS error on the client's plain
+upsert, since `expo_push_token` is globally unique and `ON CONFLICT DO
+UPDATE` re-checks the *existing* row's RLS policy — which belongs to
+the other user. Confirmed directly in `psql` before writing the fix.
+Real effect: the new user's registration silently failed and the
+previous user's stale row remained, so a push meant for the old account
+could land on a device someone else is now signed into.
+
+- ✅ `20260901070000_push_token_reassignment.sql`:
+  `register_push_token(expo_push_token, platform)`, a SECURITY DEFINER
+  RPC that deletes any other user's row for that token, then
+  upserts the caller's own — same "wrap the cross-user side effect RLS
+  can't express" pattern used throughout this schema.
+- ✅ `mobile/src/services/notifications.ts#registerPushToken()` now
+  calls the RPC instead of writing `device_push_tokens` directly.
+- ✅ **Auto-verified against real Postgres**:
+  `supabase/tests/push_token_reassignment.test.sql` (5 assertions) —
+  proves the RPC reassigns a shared token, includes a dedicated
+  assertion reproducing the *original bug* (the old plain upsert really
+  does hit the RLS error on this exact scenario), covers safe
+  same-user re-registration, and rejects an invalid platform.
+  `run_all.sh` now reports 64 total SQL PASS assertions (was 59). Wired
+  into CI.
+- ✅ Mobile typecheck/lint/37 `jest` tests all clean.
+
 ---
 
 ## Environment constraints discovered this session
