@@ -1246,4 +1246,39 @@ the precedent already established for similar glue this session (e.g.
 existing `expo-file-system` mock this would need to exercise
 `validateLocalClip()`'s three branches in isolation.
 
+## Phase 37 — fix montage_clips insert poisoning retries after a crash
+
+Found tracing the same question as Phase 34, one step further into the
+same file: does every retry path in `runJob.ts` actually stay
+retryable? `montage_clips` writes its contributor-credits/clip-order
+rows via a plain `.insert()`, keyed by a `(montage_id, clip_id)` primary
+key — and that insert runs *before* the final `montages` row is flipped
+to `'ready'`. If a retry happens after this specific insert already
+committed once — the worker process crashed between here and the
+status update (exactly the failure mode Phase 34 exists to cap the
+retry budget on), or the status update itself hit a transient error —
+every subsequent retry attempt hits a duplicate-key error on this same
+insert, every time, regardless of whether the actual render would have
+succeeded. A job that rendered correctly twice in a row would still end
+up permanently `'failed'` (`max_retries_exceeded`) once it burned
+through `config.maxRetries`, purely because of this one non-idempotent
+step — the render worker's own docstrings and this session's other
+fixes all treat idempotency as a first-class requirement (`request-
+montage`'s idempotency key, `uploadOne`'s upsert-based retry), but this
+one write was never made to match.
+
+Fixed by deleting this job's own prior `montage_clips` rows before
+re-inserting — makes the step safely re-runnable on any retry, and as a
+side benefit reflects exactly what *this* render produced even if the
+eligible-clip set shifted slightly between attempts (a clip could in
+principle complete/fail its own upload in the gap between two retries).
+
+Not independently testable beyond `worker`'s typecheck/build/all 14
+`node --test` suites (all clean, no regressions) — this is Supabase
+orchestration inside `runJob.ts`, which `worker/src/render/
+__tests__/pipeline.test.ts` deliberately doesn't exercise (it tests the
+ffmpeg pipeline directly); `docs/TESTING.md` already documents that the
+Supabase download/upload/job-claim code paths in this file need a live
+Supabase project this sandbox doesn't have. No schema/mobile changes.
+
 (Further entries appended as work proceeds through later phases.)

@@ -74,8 +74,12 @@ the function's own documented intent); and a fix on the mobile client's
 offline upload queue, which retried a permanently-broken clip upload
 (a missing local file) forever with no way for the user to dismiss it
 — it now stops after classifying the failure as unrecoverable and adds
-the queue's first manual-dismiss action. See `docs/IMPLEMENTATION_STATUS.md`
-for the exact, honest verification tier on every piece.
+the queue's first manual-dismiss action; and a fix for the render
+worker inserting `montage_clips` non-idempotently before its final
+status update, which could poison retries of a job that actually
+rendered successfully into a permanent failure after a worker crash
+between those two writes. See `docs/IMPLEMENTATION_STATUS.md` for the
+exact, honest verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

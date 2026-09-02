@@ -1086,6 +1086,26 @@ file vanished would retry indefinitely and sit in the Today screen as
   `mobile` job's typecheck/lint/test steps all explicitly ran and
   passed on the changed files.
 
+## Phase 37 — Fix montage_clips insert poisoning retries after a crash
+
+Found tracing the same question as Phase 34 one step further into the
+same file: `runJob.ts` inserts `montage_clips` rows (primary key
+`(montage_id, clip_id)`) *before* the final `montages` status update to
+`'ready'`. A retry after that insert already committed once — the
+worker crashed between the two writes, or the status update itself
+transiently failed — hit a duplicate-key error on every subsequent
+attempt, poisoning a job that actually rendered successfully until it
+burned through `config.maxRetries` and was marked permanently failed.
+
+- ✅ `worker/src/render/runJob.ts`: deletes this job's own prior
+  `montage_clips` rows before re-inserting, making the step safely
+  re-runnable on any retry.
+- ✅ Worker: typecheck/build/all 14 `node --test` suites clean. Not
+  independently testable beyond that — Supabase orchestration inside
+  `runJob.ts` needs a live project, the same documented gap as the
+  rest of this file (`pipeline.test.ts` exercises the ffmpeg pipeline
+  directly, not this code path).
+
 ---
 
 ## Environment constraints discovered this session

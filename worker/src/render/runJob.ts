@@ -122,6 +122,20 @@ export async function runJob(job: MontageJob): Promise<void> {
       return { montage_id: job.id, clip_id: meta.id, position: index, contributor_id: meta.contributorId };
     });
     if (montageClipsRows.length > 0) {
+      // Idempotent across retries: montage_clips has a (montage_id,
+      // clip_id) primary key, and this insert runs BEFORE the montages
+      // row is flipped to 'ready' below. If a retry happens after this
+      // exact insert already committed once — the worker crashed
+      // between here and the status update, or the status update
+      // itself transiently failed — a plain insert would hit a
+      // duplicate-key error on every subsequent attempt, poisoning a
+      // job that actually rendered successfully until it exhausts
+      // config.maxRetries and is marked permanently failed. Clearing
+      // this job's own prior rows first makes the step safely
+      // re-runnable, and reflects exactly what THIS render produced
+      // even if the eligible-clip set shifted slightly between attempts.
+      const { error: deleteError } = await supabaseAdmin.from('montage_clips').delete().eq('montage_id', job.id);
+      if (deleteError) throw new Error(`failed to clear prior montage_clips: ${deleteError.message}`);
       const { error: insertError } = await supabaseAdmin.from('montage_clips').insert(montageClipsRows);
       if (insertError) throw new Error(`failed to record montage_clips: ${insertError.message}`);
     }
