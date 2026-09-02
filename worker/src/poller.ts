@@ -24,6 +24,7 @@ export async function startPollingLoop(state: HealthState, shouldContinue: () =>
       const { data: job, error } = await supabaseAdmin.rpc('claim_next_montage_job', {
         p_worker_id: config.workerId,
         p_stale_after_seconds: config.staleClaimSeconds,
+        p_max_retries: config.maxRetries,
       });
 
       if (error) {

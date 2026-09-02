@@ -990,6 +990,36 @@ could land on a device someone else is now signed into.
   new `push_token_reassignment.test.sql` explicitly ran and passed
   inside the `database` job's own step list.
 
+## Phase 34 — Cap retries on worker-crash stale-claim reclaims
+
+Found tracing what happens when a montage-render job crashes the
+*worker process itself* (OOM kill, container redeploy, unhandled
+promise rejection, a native `ffmpeg` crash) rather than throwing a
+catchable exception — `runJob.ts`'s `try`/`catch` never runs, so
+`failJob()`'s `retry_count` accounting never fires. Since
+`poller.ts` is deliberately single-job-at-a-time, a job that reliably
+crashes the worker on every attempt would starve the *entire* render
+pipeline for every user in ~10-minute cycles, forever — a poison
+pill, not just a stuck job for its own requester.
+
+- ✅ `20260901080000_worker_claim_retry_cap.sql`:
+  `claim_next_montage_job()` gained `p_max_retries` (default 3,
+  matching `worker/src/config.ts`'s `MAX_RETRIES`). Reclaiming a stale
+  claim now counts as a used retry attempt; once the budget is met the
+  job is marked `'failed'` (`error_code =
+  'worker_crash_max_retries_exceeded'`) instead of being handed back,
+  and the function keeps searching rather than stalling the poller
+  behind the poison pill.
+- ✅ `worker/src/poller.ts` passes `p_max_retries: config.maxRetries`.
+- ✅ **Auto-verified against real Postgres**: 3 new assertions in
+  `supabase/tests/worker_claim.test.sql` (5 total) prove the retry
+  count increments on reclaim, a job hits its cap and is marked
+  failed rather than retried forever, and — the actual production
+  concern — a poison pill at the front of the queue doesn't block a
+  real job queued behind it. `run_all.sh` now reports 67 total SQL
+  PASS assertions (was 64). Wired into CI.
+- ✅ Worker: typecheck/build/all 14 `node --test` suites clean.
+
 ---
 
 ## Environment constraints discovered this session

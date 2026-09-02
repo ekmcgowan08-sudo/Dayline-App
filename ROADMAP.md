@@ -62,9 +62,13 @@ empirically against real Postgres, for a device's push token failing
 to reassign when a different user logs in on it (a borrowed phone or
 shared family device previously registered under someone else's
 account) — the old registration stayed live, meaning a push meant for
-the previous account could land on that device. See
-`docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
-tier on every piece.
+the previous account could land on that device. Also since added: a
+retry cap on the render worker's stale-claim reclaim path — a job that
+crashed the worker process itself (not a catchable exception) had no
+retry accounting at all and could starve the single-job-at-a-time
+render pipeline for every user, indefinitely, if it crashed on every
+attempt. See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest
+verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

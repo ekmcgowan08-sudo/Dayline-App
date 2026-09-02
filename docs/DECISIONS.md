@@ -1116,4 +1116,54 @@ no-op, no duplicate row) and an invalid platform being rejected.
 typecheck/lint/37 `jest` tests all clean — no dedicated mobile test,
 matching every other RPC-wrapper service function's precedent.
 
+## Phase 34 — cap retries on worker-crash stale-claim reclaims
+
+Found by tracing what actually happens to a montage-render job that
+crashes the *worker process itself* rather than throwing a catchable
+exception inside `runJob()` — an unhandled promise rejection, an OOM
+kill, a container redeploy mid-render, a native `ffmpeg` crash. All of
+those bypass `runJob.ts`'s own `try`/`catch` entirely, so `failJob()`
+never runs and `retry_count` never gets incremented or checked against
+`config.maxRetries`. The row just sits at `'processing'` until
+`claim_next_montage_job()`'s staleness threshold (600s default) passes,
+then gets reclaimed and handed to `runJob()` again — unconditionally,
+with no retry accounting at all on this path, forever.
+
+The severity is worse than "one user's montage never finishes":
+`worker/src/poller.ts` is deliberately single-job-at-a-time (its own
+comment explains why — predictable resource use on a small container).
+A job that reliably crashes the worker on every attempt (a
+sufficiently-corrupt clip, say) doesn't just fail for its own
+requester — it starves the *entire render pipeline* for every user,
+in ~10-minute cycles, indefinitely. A poison pill, not a stuck job.
+
+`claim_next_montage_job()` gained a third parameter, `p_max_retries`
+(default 3, matching `worker/src/config.ts`'s existing `MAX_RETRIES`
+env var, now threaded through from `poller.ts`). Reclaiming a *stale*
+claim (one where `claimed_at` was already set — i.e. some previous
+attempt genuinely started and then went dark) now counts as a used
+retry attempt; once that would meet or exceed the budget, the job is
+marked `'failed'` with `error_code = 'worker_crash_max_retries_exceeded'`
+instead of being handed back — and the function keeps searching for a
+real job rather than returning `null` and leaving the poller idle
+behind the poison pill. A fresh, never-before-claimed job is unaffected
+(its `retry_count` starts at 0 either way, matching prior behavior).
+The graceful-failure path in `runJob.ts`'s `failJob()` is untouched —
+its own `retry_count`/`config.maxRetries` accounting already worked
+correctly for exceptions it actually catches; this closes the one path
+that had none.
+
+Verified: extended `supabase/tests/worker_claim.test.sql` (3 new
+assertions, 5 total in the file) against real Postgres 16 — proves a
+reclaimed stale claim increments `retry_count`, a second crash-and-
+reclaim stays within budget, a third meets the cap and the job is
+marked `failed` (not returned again), and — the actual production
+concern, not just the accounting — a poison pill sitting at the front
+of the queue does not block a real, unclaimed job queued behind it.
+`run_all.sh`: 67 total SQL PASS assertions (was 64). Worker:
+typecheck/build/all 14 `node --test` suites still clean; no dedicated
+`poller.ts` test added (it has none today — the real coverage is the
+RPC contract it calls, which `worker_claim.test.sql` already exercises
+directly).
+
 (Further entries appended as work proceeds through later phases.)

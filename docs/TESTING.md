@@ -50,7 +50,10 @@ All three are also wired into `.github/workflows/ci.yml`.
   'FAIL: ...'`, so a broken guarantee fails the whole script loudly.
 - `worker_claim.test.sql` — proves `claim_next_montage_job()`'s
   concurrency safety (no double-claim, oldest-first, stale-claim
-  reclamation after a simulated worker crash).
+  reclamation after a simulated worker crash) and its retry cap on
+  repeated worker-crash reclaims: retry count increments per reclaim,
+  a job that exhausts its budget is marked `failed` instead of retried
+  forever, and a poison pill doesn't block a real job queued behind it.
 - `entitlement_archive.test.sql` — proves `list_my_personal_montages()`
   actually enforces the free-tier 30-day archive window server-side, and
   that upgrading to `plus` immediately lifts it.
