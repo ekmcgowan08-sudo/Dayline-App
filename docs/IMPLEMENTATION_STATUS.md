@@ -1047,6 +1047,12 @@ ever sent.
   Edge-Function-only fix this session (no live Supabase project in
   this sandbox). No mobile/worker/schema changes; no new deployment
   step.
+- ✅ **Confirmed on real CI**: run 33581836686 (the 19th consecutive
+  clean run), all 7 jobs passed, checked individually per job —
+  `edge-functions-typecheck`'s "Type-check every function" step
+  explicitly confirms `send-capture-reminders/index.ts` compiles
+  cleanly, the one job this phase's change couldn't be verified
+  against locally (no `deno` in this sandbox).
 
 ---
 
