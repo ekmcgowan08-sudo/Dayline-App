@@ -1206,4 +1206,44 @@ against for real, and Deno's push-batch/fetch logic isn't unit-testable
 the way the SQL-side fixes have been. No mobile/worker changes; no
 schema change; no new deployment step.
 
+## Phase 36 — stop retrying permanently-failed clip uploads forever
+
+Found tracing the same "does a retry loop actually terminate" question
+that closed Phases 34-35, this time in the mobile client's offline
+upload queue. `validateLocalClip()` in `mobile/src/services/clips.ts`
+can fail for three reasons: the local file is missing, empty, or
+unexpectedly large. All three are permanent — no amount of retrying
+makes a missing file reappear — but `processUploadQueue()` treated
+every failure identically: schedule another attempt with exponential
+backoff, capping at a 15-minute interval, forever. A clip whose local
+file vanished (OS low-storage cleanup, a cache-clearing action, any
+number of ordinary reasons) would sit in the queue being retried every
+15 minutes indefinitely, permanently shown in the Today screen as
+"Upload failed — will retry" with no way for the user to ever clear it
+— a real, if lower-severity than the last two, dead-end.
+
+`validateLocalClip()`/`uploadOne()` now return an optional
+`permanent: true` flag alongside the error. `processUploadQueue()`
+routes a permanent failure to a new terminal `'permanently_failed'`
+queue status instead of scheduling another attempt — deliberately
+*not* reusing `nextAttemptAt: null`, since the `due` filter treats a
+null `nextAttemptAt` as immediately eligible, which would have turned
+"stop retrying" into "retry on every 20-second poll instead of every 15
+minutes." `'permanently_failed'` is a status the `due` filter's
+`status === 'queued' || status === 'failed'` check never matches, so
+it's excluded outright. The Today screen shows a distinct, honest
+message for this state ("this clip's file is gone") and a "Remove"
+button wired to the store's existing `remove()` action — the first
+manual-dismiss affordance the upload queue has ever had, since nothing
+before this could ever need one (every other failure was expected to
+eventually succeed on retry).
+
+Verified: `npm run typecheck && npm run lint && npm test` all clean,
+37/37 tests still passing (no regressions). No dedicated test added —
+this is state-machine/UI glue over an already-tested store, matching
+the precedent already established for similar glue this session (e.g.
+`MontageThumbnail`/`ClipThumbnail`), and the mobile test setup has no
+existing `expo-file-system` mock this would need to exercise
+`validateLocalClip()`'s three branches in isolation.
+
 (Further entries appended as work proceeds through later phases.)

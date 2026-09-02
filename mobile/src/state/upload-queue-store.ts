@@ -7,7 +7,7 @@ export type QueuedClip = {
   localUri: string;
   durationMs: number;
   capturedAt: string; // ISO
-  status: 'queued' | 'uploading' | 'failed' | 'done';
+  status: 'queued' | 'uploading' | 'failed' | 'permanently_failed' | 'done';
   retryCount: number;
   lastError: string | null;
   nextAttemptAt: string | null; // ISO — exponential backoff gate

@@ -25,7 +25,7 @@ import { useTheme } from '../../../hooks/use-theme';
 
 type Row =
   | { kind: 'slot'; slot: CaptureSlot; clip: Clip | null }
-  | { kind: 'uploading'; clientCaptureId: string; capturedAt: string; failed: boolean };
+  | { kind: 'uploading'; clientCaptureId: string; capturedAt: string; failed: boolean; permanentlyFailed: boolean };
 
 export default function Today() {
   const theme = useTheme();
@@ -83,7 +83,13 @@ export default function Today() {
   const rows: Row[] = [
     ...slots.map((slot): Row => ({ kind: 'slot', slot, clip: slot.clip_id ? clipsById.get(slot.clip_id) ?? null : null })),
     ...uploadingItems.map(
-      (i): Row => ({ kind: 'uploading', clientCaptureId: i.clientCaptureId, capturedAt: i.capturedAt, failed: i.status === 'failed' })
+      (i): Row => ({
+        kind: 'uploading',
+        clientCaptureId: i.clientCaptureId,
+        capturedAt: i.capturedAt,
+        failed: i.status === 'failed',
+        permanentlyFailed: i.status === 'permanently_failed',
+      })
     ),
   ];
 
@@ -140,10 +146,27 @@ export default function Today() {
           if (item.kind === 'uploading') {
             return (
               <Card style={styles.row}>
-                <View style={[styles.dot, { backgroundColor: item.failed ? theme.danger : theme.accentSky }]} />
+                <View
+                  style={[
+                    styles.dot,
+                    { backgroundColor: item.failed || item.permanentlyFailed ? theme.danger : theme.accentSky },
+                  ]}
+                />
                 <Text variant="body" style={{ flex: 1 }}>
-                  {item.failed ? 'Upload failed — will retry' : 'Uploading…'}
+                  {item.permanentlyFailed
+                    ? "Upload failed — this clip's file is gone"
+                    : item.failed
+                      ? 'Upload failed — will retry'
+                      : 'Uploading…'}
                 </Text>
+                {item.permanentlyFailed ? (
+                  <Button
+                    label="Remove"
+                    variant="ghost"
+                    fullWidth={false}
+                    onPress={() => useUploadQueueStore.getState().remove(item.clientCaptureId)}
+                  />
+                ) : null}
               </Card>
             );
           }

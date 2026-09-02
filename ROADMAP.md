@@ -70,7 +70,11 @@ render pipeline for every user, indefinitely, if it crashed on every
 attempt; and a fix for `send-capture-reminders` marking capture
 reminders "sent" even when the Expo push batch never actually went out
 (a network hiccup left the slot permanently unretried, contradicting
-the function's own documented intent). See `docs/IMPLEMENTATION_STATUS.md`
+the function's own documented intent); and a fix on the mobile client's
+offline upload queue, which retried a permanently-broken clip upload
+(a missing local file) forever with no way for the user to dismiss it
+— it now stops after classifying the failure as unrecoverable and adds
+the queue's first manual-dismiss action. See `docs/IMPLEMENTATION_STATUS.md`
 for the exact, honest verification tier on every piece.
 
 ## Milestone 2 — Production hardening

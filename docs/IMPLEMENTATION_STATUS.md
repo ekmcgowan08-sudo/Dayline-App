@@ -1054,6 +1054,34 @@ ever sent.
   cleanly, the one job this phase's change couldn't be verified
   against locally (no `deno` in this sandbox).
 
+## Phase 36 — Stop retrying permanently-failed clip uploads forever
+
+Found tracing the same "does this retry loop actually terminate"
+question that closed Phases 34-35, this time in the mobile client's
+offline upload queue: `validateLocalClip()`'s three failure modes
+(local file missing/empty/oversized) are all permanent, but
+`processUploadQueue()` scheduled another retry for every failure
+identically, capping backoff at 15 minutes forever. A clip whose local
+file vanished would retry indefinitely and sit in the Today screen as
+"Upload failed — will retry" with no way to ever clear it.
+
+- ✅ `mobile/src/services/clips.ts`: `validateLocalClip()`/`uploadOne()`
+  return an optional `permanent: true` flag; `processUploadQueue()`
+  routes a permanent failure to a new terminal `'permanently_failed'`
+  status instead of scheduling another attempt.
+- ✅ `mobile/src/state/upload-queue-store.ts`: added
+  `'permanently_failed'` to `QueuedClip['status']` — excluded from the
+  `due` filter, so it's never picked up again.
+- ✅ `mobile/src/app/(app)/today/index.tsx`: shows a distinct message
+  for this state and a "Remove" button (the queue's first manual-
+  dismiss affordance, since every other failure was always expected to
+  eventually succeed on retry).
+- ✅ `npm run typecheck && npm run lint && npm test` all clean, 37/37
+  tests still passing. No dedicated test added — state-machine/UI glue
+  over an already-tested store, matching precedent for similar glue
+  this session; the mobile test setup has no `expo-file-system` mock
+  this would need.
+
 ---
 
 ## Environment constraints discovered this session

@@ -30,12 +30,17 @@ export function enqueueClipForUpload(localUri: string, durationMs: number): stri
   return clientCaptureId;
 }
 
-async function validateLocalClip(localUri: string): Promise<{ error: string | null }> {
+/** A validation failure here is permanent — no amount of retrying makes a
+ * missing/empty/oversized local file different, unlike a network or
+ * storage error, which is why these are flagged `permanent: true` and
+ * routed to a terminal queue state instead of the exponential-backoff
+ * retry loop (see processUploadQueue). */
+async function validateLocalClip(localUri: string): Promise<{ error: string | null; permanent?: boolean }> {
   const info = await FileSystem.getInfoAsync(localUri);
-  if (!info.exists) return { error: 'Recorded file is missing' };
+  if (!info.exists) return { error: 'Recorded file is missing', permanent: true };
   if ('size' in info && info.size !== undefined) {
-    if (info.size === 0) return { error: 'Recorded file is empty' };
-    if (info.size > MAX_REASONABLE_CLIP_BYTES) return { error: 'Recorded file is unexpectedly large' };
+    if (info.size === 0) return { error: 'Recorded file is empty', permanent: true };
+    if (info.size > MAX_REASONABLE_CLIP_BYTES) return { error: 'Recorded file is unexpectedly large', permanent: true };
   }
   return { error: null };
 }
@@ -43,9 +48,9 @@ async function validateLocalClip(localUri: string): Promise<{ error: string | nu
 /** Uploads one queued clip. Idempotent: reusing the same clientCaptureId on
  * retry upserts the same clips row via the unique (user_id, client_capture_id)
  * index instead of creating a duplicate. */
-async function uploadOne(userId: string, item: QueuedClip): Promise<{ error: string | null }> {
-  const { error: validationError } = await validateLocalClip(item.localUri);
-  if (validationError) return { error: validationError };
+async function uploadOne(userId: string, item: QueuedClip): Promise<{ error: string | null; permanent?: boolean }> {
+  const { error: validationError, permanent } = await validateLocalClip(item.localUri);
+  if (validationError) return { error: validationError, permanent };
 
   const storagePath = `${userId}/${item.clientCaptureId}.mp4`;
   const { error: uploadError } = await uploadLocalFile('clips', storagePath, item.localUri, 'video/mp4', true);
@@ -123,8 +128,15 @@ export async function processUploadQueue(userId: string): Promise<void> {
 
   for (const item of due) {
     store.update(item.clientCaptureId, { status: 'uploading' });
-    const { error } = await uploadOne(userId, item);
-    if (error) {
+    const { error, permanent } = await uploadOne(userId, item);
+    if (error && permanent) {
+      // No amount of retrying fixes a missing/empty/oversized local
+      // file — stop scheduling further attempts (nextAttemptAt is
+      // irrelevant here since 'permanently_failed' is excluded from the
+      // `due` filter above) rather than retrying forever every 15
+      // minutes with no way for the user to clear it.
+      store.update(item.clientCaptureId, { status: 'permanently_failed', lastError: error });
+    } else if (error) {
       const retryCount = item.retryCount + 1;
       const delaySec = BACKOFF_SECONDS[Math.min(retryCount - 1, BACKOFF_SECONDS.length - 1)];
       store.update(item.clientCaptureId, {
