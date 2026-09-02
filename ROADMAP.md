@@ -78,8 +78,16 @@ the queue's first manual-dismiss action; and a fix for the render
 worker inserting `montage_clips` non-idempotently before its final
 status update, which could poison retries of a job that actually
 rendered successfully into a permanent failure after a worker crash
-between those two writes. See `docs/IMPLEMENTATION_STATUS.md` for the
-exact, honest verification tier on every piece.
+between those two writes. Also since fixed: a TOCTOU race in
+`check_rate_limit()` — the ledger function gating every rate-limited
+write in this schema (comments, reactions, reports, group creation,
+transcription requests, account deletion, montage requests) read the
+event count and inserted a new event as two separate statements with
+no lock between them, so two concurrent callers (a double-tap, two
+devices on the same account) could both slip past the same limit;
+proven against real Postgres before fixing, closed with a per-
+`(bucket, subject)` advisory lock. See `docs/IMPLEMENTATION_STATUS.md`
+for the exact, honest verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

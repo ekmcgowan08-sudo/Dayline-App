@@ -95,6 +95,25 @@ All three are also wired into `.github/workflows/ci.yml`.
   dedicated assertion that reproduces the original bug (a plain client
   upsert on the same scenario hits an RLS error), plus safe same-user
   re-registration and invalid-platform rejection.
+- `rate_limit_race.test.sh` — the one test in this directory that isn't
+  a `.sql` file, because it needs real concurrency: two separate
+  Postgres backends racing `check_rate_limit()` for the same
+  `(bucket, subject)`, which a single-connection `.sql` script can't
+  express. Proves the fix in `20260902000000_rate_limit_race_fix.sql`
+  for a real TOCTOU bug found by testing against a live Postgres 16
+  instance — the original two-statement (read count, then insert)
+  function let two concurrent callers both read the count before
+  either insert committed, so both could pass even at `max_events=1`,
+  exceeding the caller's own stated limit. Since `check_rate_limit()`
+  gates real writes directly via RLS `WITH CHECK` (comments, reactions,
+  reports, group creation) as well as several Edge Functions
+  (transcribe, delete-account, request-montage), this wasn't
+  theoretical — a double-tap or two devices signed into the same
+  account could trigger it. The test instruments the function's
+  *actual deployed definition* (not a hand-written stand-in) with an
+  injected delay between its read and its insert to make the race
+  deterministic, asserts exactly one of two concurrent callers passes
+  at `max_events=1`, then restores the real function unchanged.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 

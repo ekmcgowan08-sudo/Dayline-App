@@ -1118,6 +1118,49 @@ burned through `config.maxRetries` and was marked permanently failed.
   ~28s, and the `worker` job's typecheck/build/all-tests steps all
   explicitly ran and passed on the changed file.
 
+## Phase 38 — Fix check_rate_limit() TOCTOU race under concurrent callers
+
+Found by extending the same "does every retry/concurrent path stay
+correct" question to `check_rate_limit()` itself — the ledger function
+every rate-limited RLS `WITH CHECK` policy (comments, reactions,
+reports, group creation) and several Edge Functions (transcribe,
+delete-account, request-montage) call before allowing a write. Its
+original body read the current event count and inserted a new event as
+two separate statements with no lock between them: two concurrent
+calls for the same `(bucket, subject)` — a double-tap, two devices
+signed into the same account, or a client retry racing its own
+original request — could both read the count *before* either insert
+committed, so both would see room under the limit and both return
+`true`, letting the caller's stated limit be exceeded by however many
+callers raced.
+
+- ✅ Proven against a real Postgres 16 instance before fixing: a copy
+  of the original two-statement function with `max_events=1`, fired
+  from two concurrent `psql` connections against the same
+  `(bucket, subject)`, returned `true` from **both** calls and left 2
+  rows in `rate_limit_events` — one over the stated limit.
+- ✅ `supabase/migrations/20260902000000_rate_limit_race_fix.sql`:
+  `check_rate_limit()` now takes a `pg_advisory_xact_lock` keyed on
+  `(bucket, subject)` before reading the count, serializing concurrent
+  callers for the same key so the second always sees an up-to-date
+  count. Different keys never contend with each other. Transaction-
+  scoped, so it releases automatically.
+- ✅ `supabase/tests/rate_limit_race.test.sh`: a new, non-`.sql` test
+  (needs real concurrency, which a single-connection SQL script can't
+  express) that instruments the function's *actual deployed
+  definition* — not a hand-written stand-in — with an injected delay
+  between its read and its insert to make the race deterministic,
+  fires two concurrent callers at `max_events=1`, and asserts exactly
+  one passes with exactly one row inserted. Verified this test
+  actually discriminates: it fails with a clear diagnostic
+  ("no longer takes the advisory lock") when pointed at the pre-fix
+  function, and passes against the fix. Wired into
+  `supabase/tests/run_all.sh` and `.github/workflows/ci.yml`'s
+  `database` job.
+- ✅ Full local `run_all.sh` suite (all 18 test files) reruns clean
+  after this change.
+- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+
 ---
 
 ## Environment constraints discovered this session

@@ -113,6 +113,8 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/moderator_warn_user.test.sql postgres
       - name: Run push token reassignment test suite
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/push_token_reassignment.test.sql postgres
+      - name: Run rate limit race test
+        run: bash supabase/tests/rate_limit_race.test.sh postgres
 
   dependency-audit:
     name: Dependency audit (high/critical fails the build)
