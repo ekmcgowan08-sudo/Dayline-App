@@ -1081,6 +1081,10 @@ file vanished would retry indefinitely and sit in the Today screen as
   over an already-tested store, matching precedent for similar glue
   this session; the mobile test setup has no `expo-file-system` mock
   this would need.
+- ✅ **Confirmed on real CI**: run 33637624288 (the 20th consecutive
+  clean run), all 7 jobs passed, checked individually per job — the
+  `mobile` job's typecheck/lint/test steps all explicitly ran and
+  passed on the changed files.
 
 ---
 
