@@ -1105,6 +1105,18 @@ burned through `config.maxRetries` and was marked permanently failed.
   `runJob.ts` needs a live project, the same documented gap as the
   rest of this file (`pipeline.test.ts` exercises the ffmpeg pipeline
   directly, not this code path).
+- ✅ **Confirmed on real CI**: run 33638238943 (the 21st consecutive
+  clean run), all 7 jobs passed, checked individually per job. This run
+  needed two retries first — its `worker` job's "Install ffmpeg"
+  (`apt-get update && apt-get install -y ffmpeg fonts-dejavu-core`) step
+  hung with zero progress on two consecutive attempts while every other
+  job (including the worker's own separate Docker-image-build job, which
+  installs no ffmpeg) finished normally in under two minutes each time —
+  a GitHub-hosted-runner/apt-mirror-side flake, not a regression from
+  this change. Cancelling and re-running the workflow a third time
+  (`run_attempt` 3) completed cleanly: "Install ffmpeg" took its normal
+  ~28s, and the `worker` job's typecheck/build/all-tests steps all
+  explicitly ran and passed on the changed file.
 
 ---
 
