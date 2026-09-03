@@ -1212,11 +1212,14 @@ bucket (unlike `purge-used-clips` for raw clips).
 - ✅ Worker: typecheck/build/all 14 `node --test` suites clean after the
   `runJob.ts` change.
 - ✅ Full local `run_all.sh` suite (all 19 test files) reruns clean.
-- ⬜ `purge-orphaned-montages`'s Deno typecheck not verified in this
-  sandbox (no local Deno available — see the same documented gap on
-  every other Edge Function in this file); pending real CI's
-  `edge-functions-typecheck` job.
-- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+- ✅ **Confirmed on real CI**: run 33708969185 (the 23rd consecutive
+  clean run — all 7 jobs green on the first attempt, no ffmpeg-install
+  flake this time), all 7 jobs passed, checked individually per job.
+  `edge-functions-typecheck` explicitly type-checked the new
+  `purge-orphaned-montages/index.ts` and passed (closing the one gap
+  local sandbox couldn't verify — no Deno available here), and the
+  `database` job's new "Run orphaned montage storage purge test suite"
+  step passed on a real Postgres instance, not just this local sandbox.
 
 ---
 
