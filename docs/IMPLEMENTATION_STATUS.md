@@ -1159,7 +1159,12 @@ callers raced.
   `database` job.
 - ✅ Full local `run_all.sh` suite (all 18 test files) reruns clean
   after this change.
-- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+- ✅ **Confirmed on real CI**: run 33640569081 (the 22nd consecutive
+  clean run), all 7 jobs passed, checked individually per job — the
+  `database` job's new "Run rate limit race test" step explicitly ran
+  and passed on a real GitHub Actions runner (not just this local
+  sandbox), and "Install ffmpeg" completed normally this time (~18s,
+  no repeat of Phase 37's transient runner hang).
 
 ---
 
