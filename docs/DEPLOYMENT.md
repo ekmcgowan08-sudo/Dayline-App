@@ -36,6 +36,7 @@ supabase functions deploy revenuecat-webhook --no-verify-jwt
 supabase functions deploy transcribe
 supabase functions deploy send-capture-reminders --no-verify-jwt
 supabase functions deploy purge-used-clips --no-verify-jwt
+supabase functions deploy purge-orphaned-montages --no-verify-jwt
 supabase functions deploy fulfill-data-export --no-verify-jwt
 supabase functions deploy get-export-url
 supabase secrets set --env-file functions/.env   # after filling in real values
@@ -119,6 +120,34 @@ select cron.schedule(
 Without this, raw clips simply accumulate in storage indefinitely until
 the user deletes them individually or deletes their account — functional,
 just more expensive at scale than necessary.
+
+### Orphaned montage storage purge scheduling (recommended before real usage)
+
+`purge-orphaned-montages` drains the `pending_storage_purges` queue a
+`BEFORE DELETE` trigger on `montages` fills whenever a montage row is
+deleted (see `20260902010000_orphaned_montage_storage_purge.sql`) —
+primarily group deletion, which cascades the database row via `on delete
+cascade` but has no way to reach Supabase Storage's HTTP API, so a
+deleted group's rendered video files were previously left behind in the
+`montages` bucket forever. Same `pg_cron` mechanism, once daily is plenty:
+
+```sql
+select cron.schedule(
+  'purge-orphaned-montages',
+  '30 4 * * *',   -- once daily at 4:30am UTC, offset from purge-used-clips
+  $$
+  select net.http_post(
+    url := 'https://<your-project-ref>.supabase.co/functions/v1/purge-orphaned-montages',
+    headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>', 'Content-Type', 'application/json'),
+    body := '{}'::jsonb
+  );
+  $$
+);
+```
+
+Without this, deleted groups' montage videos simply accumulate in storage
+indefinitely — functional (nothing references them, no user-visible
+effect), just wasted storage cost that grows with group churn.
 
 ### Data-export fulfillment scheduling (recommended before real usage)
 

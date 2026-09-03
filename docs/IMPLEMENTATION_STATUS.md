@@ -1166,6 +1166,58 @@ callers raced.
   sandbox), and "Install ffmpeg" completed normally this time (~18s,
   no repeat of Phase 37's transient runner hang).
 
+## Phase 39 — Fix two montage storage leaks (retry, and group deletion)
+
+Found by re-reading `runJob.ts`'s upload step right after Phase 37's fix
+to the write immediately below it, asking the same "does every retry
+path stay correct" question one line earlier: the montage's output
+storage path was `${job.kind}/${ownerId}/${randomUUID()}.mp4` — a fresh
+random name on *every* attempt, including retries. A crash between a
+successful upload and the final `montages` row update (the exact failure
+window Phase 37 fixed for `montage_clips`) meant the retry uploaded again
+under a brand new random name and pointed the row at that one, leaking
+the first attempt's file forever with nothing referencing it.
+
+- ✅ `worker/src/render/runJob.ts`: the storage path is now keyed on
+  `job.id` (this montage row's own primary key, stable across every
+  retry) instead of a fresh `randomUUID()` per attempt, so a retry's
+  `upload(..., { upsert: true })` safely overwrites its own prior
+  attempt instead of leaking it.
+
+Checking that upload path surfaced a second, unrelated leak in the same
+storage bucket: `delete_group()` (and `leave_group()`'s last-member-
+leaving auto-delete path) both just `delete from groups where id = ...`.
+`montages.group_id references groups(id) on delete cascade` correctly
+removes the database rows, but a DB cascade has no way to reach Supabase
+Storage's HTTP API — every deleted group's rendered montage video was
+left behind in the `montages` bucket forever, with no purge job for this
+bucket (unlike `purge-used-clips` for raw clips).
+
+- ✅ `supabase/migrations/20260902010000_orphaned_montage_storage_purge.sql`:
+  a `BEFORE DELETE` trigger on `montages` queues any deleted row's
+  `storage_path` into a new `pending_storage_purges` table, regardless of
+  *why* the row was deleted — not special-cased to group deletion, so it
+  also safety-nets delete-account's personal-montage path (a harmless
+  no-op there, since storage removal is idempotent — proven in Phase 38's
+  investigation) and any future deletion path.
+- ✅ `supabase/functions/purge-orphaned-montages/index.ts`: a new
+  scheduled function draining that queue, mirroring `purge-used-clips`'s
+  shape (leaves a row queued for retry on removal failure rather than
+  losing track of it).
+- ✅ `supabase/tests/orphaned_montage_storage_purge.test.sql`: proves the
+  trigger queues a group-cascade-deleted montage's path, a directly
+  deleted montage's path (the general-safety-net claim, not just
+  asserted), and that a montage with no `storage_path` yet is never
+  queued. Verified against real Postgres 16.
+- ✅ Worker: typecheck/build/all 14 `node --test` suites clean after the
+  `runJob.ts` change.
+- ✅ Full local `run_all.sh` suite (all 19 test files) reruns clean.
+- ⬜ `purge-orphaned-montages`'s Deno typecheck not verified in this
+  sandbox (no local Deno available — see the same documented gap on
+  every other Edge Function in this file); pending real CI's
+  `edge-functions-typecheck` job.
+- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+
 ---
 
 ## Environment constraints discovered this session

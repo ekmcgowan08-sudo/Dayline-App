@@ -115,6 +115,8 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/push_token_reassignment.test.sql postgres
       - name: Run rate limit race test
         run: bash supabase/tests/rate_limit_race.test.sh postgres
+      - name: Run orphaned montage storage purge test suite
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/orphaned_montage_storage_purge.test.sql postgres
 
   dependency-audit:
     name: Dependency audit (high/critical fails the build)

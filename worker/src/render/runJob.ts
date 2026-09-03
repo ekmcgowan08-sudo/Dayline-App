@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { DAYLINE_END_CARD_TEXT } from '../brand.js';
@@ -114,7 +113,18 @@ export async function runJob(job: MontageJob): Promise<void> {
     });
 
     const ownerId = job.kind === 'personal' ? job.user_id! : job.group_id!;
-    const outputStoragePath = `${job.kind}/${ownerId}/${randomUUID()}.mp4`;
+    // Keyed on job.id (this montage row's own primary key, stable across
+    // every retry of this job) rather than a fresh random UUID per
+    // attempt — a random name per attempt meant a crash between a
+    // successful upload and the montages row update (the same failure
+    // window Phase 37 fixed for montage_clips) orphaned that upload in
+    // the 'montages' bucket forever: the retry would upload again under a
+    // NEW random name and the row would point at that one instead,
+    // leaking the first with nothing left referencing it and no purge
+    // job for this bucket (unlike purge-used-clips for raw clips — see
+    // docs/COSTS.md). A stable path plus upload()'s upsert:true makes a
+    // retry's upload safely overwrite its own prior attempt instead.
+    const outputStoragePath = `${job.kind}/${ownerId}/${job.id}.mp4`;
     await uploadMontageFile(outputStoragePath, result.outputPath);
 
     const montageClipsRows = result.renderedClipPaths.map((localPath, index) => {

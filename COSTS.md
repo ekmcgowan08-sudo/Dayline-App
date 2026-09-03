@@ -68,6 +68,16 @@ before relying on these):
   `ENTITLEMENT_LIMITS.free.memoryArchiveDays` (`mobile/src/constants/
   entitlements.ts`, 30 days) — proven in
   `supabase/tests/entitlement_archive.test.sql`.
+- **Purge orphaned montage videos on group deletion** — implemented: a
+  `BEFORE DELETE` trigger on `montages` queues any deleted row's storage
+  path, and a scheduled `purge-orphaned-montages` function drains that
+  queue. Closes a real leak, not a theoretical one: `delete_group()` (and
+  `leave_group()`'s last-member-leaving auto-delete path) always cascaded
+  the database row via `on delete cascade`, but a DB cascade can't reach
+  Supabase Storage's HTTP API, so every deleted group's rendered montage
+  video was left in storage forever with nothing referencing it. Needs
+  the same `pg_cron` scheduling step in `docs/DEPLOYMENT.md` as the other
+  scheduled functions to actually run on a real project.
 - **Consider S3-compatible egress-free storage** (Cloudflare R2, Backblaze
   B2) once video egress costs start mattering — both are commonly used
   alongside Supabase for exactly this reason. Not integrated in this

@@ -86,8 +86,20 @@ event count and inserted a new event as two separate statements with
 no lock between them, so two concurrent callers (a double-tap, two
 devices on the same account) could both slip past the same limit;
 proven against real Postgres before fixing, closed with a per-
-`(bucket, subject)` advisory lock. See `docs/IMPLEMENTATION_STATUS.md`
-for the exact, honest verification tier on every piece.
+`(bucket, subject)` advisory lock. Also since fixed: two related
+storage leaks in the `montages` bucket — the render worker uploaded a
+retried job under a fresh random filename every attempt instead of
+overwriting its own prior attempt, leaking one file per crash-then-
+retry; and deleting a group (or the last member leaving one) cascaded
+away the database row but never touched that group's rendered video
+file in storage, since a database cascade can't call Supabase
+Storage's API. Closed with a stable per-job filename for the first,
+and a general delete-queues-for-purge trigger plus a new scheduled
+`purge-orphaned-montages` function for the second — the trigger fires
+on any montage row deletion, not just group deletion, so it also
+safety-nets any future deletion path. See
+`docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
+tier on every piece.
 
 ## Milestone 2 — Production hardening
 

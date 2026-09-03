@@ -114,6 +114,13 @@ All three are also wired into `.github/workflows/ci.yml`.
   injected delay between its read and its insert to make the race
   deterministic, asserts exactly one of two concurrent callers passes
   at `max_events=1`, then restores the real function unchanged.
+- `orphaned_montage_storage_purge.test.sql` — proves the `BEFORE DELETE`
+  trigger on `montages` (`20260902010000_orphaned_montage_storage_purge.sql`)
+  queues a deleted row's `storage_path` into `pending_storage_purges`,
+  both via a group's cascade delete (the real bug: `delete_group()` never
+  touched the `montages` storage bucket) and via a direct row delete (the
+  general safety net this was built as), and that a montage with no
+  `storage_path` yet is never queued.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 
