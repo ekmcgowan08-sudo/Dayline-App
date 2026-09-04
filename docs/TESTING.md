@@ -130,6 +130,13 @@ All three are also wired into `.github/workflows/ci.yml`.
   (which bypasses grant checks entirely, and so never caught that all
   five were missing the `grant execute ... to service_role` their
   `revoke all ... from public` needed to be paired with).
+- `acceptance_records_idempotent.test.sql` — proves the unique
+  constraint on `(user_id, document, version)`
+  (`20260902030000_acceptance_records_idempotent.sql`) makes a retried
+  consent-screen submission (the real scenario: an interrupted
+  onboarding flow re-sends the same acceptance rows on next launch) a
+  no-op that preserves the original `accepted_at`, while a genuinely new
+  document version still records its own row.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 

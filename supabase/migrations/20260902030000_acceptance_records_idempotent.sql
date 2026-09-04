@@ -1,0 +1,24 @@
+-- Found during a launch-readiness pass tracing what happens on partial
+-- failure/retry, the same question behind several other fixes this
+-- session: onboarding_completed_at (20260831080000_onboarding_flag.sql)
+-- is only set at the very end of the onboarding flow, and the root route
+-- (mobile/src/app/index.tsx) sends any user without it all the way back
+-- to the FIRST onboarding screen on every app launch. A user who accepts
+-- terms/privacy/rules/age on the consent screen (inserting 4 rows here),
+-- then has the app killed or crashes on a later onboarding screen before
+-- onboarding_completed_at is ever set, lands back on the consent screen
+-- next launch and — since acceptance_records had no unique constraint —
+-- would insert 4 more duplicate rows. Not a functional break (every row
+-- still records a true acceptance), but this table's own comment calls
+-- it an "immutable audit trail" of legal consent, and a real consent
+-- record shouldn't silently accumulate duplicates from an interrupted
+-- flow no user ever intended to "re-accept" anything through.
+--
+-- Fixed with a unique constraint on the natural key (one acceptance row
+-- per user per document per version) plus switching the client
+-- (recordAcceptance() in mobile/src/services/legal.ts) from a plain
+-- insert to an upsert that no-ops on conflict — preserving the FIRST
+-- accepted_at for each (user, document, version), which is the
+-- legally-relevant timestamp: the earliest moment consent was given.
+alter table acceptance_records
+  add constraint acceptance_records_unique_per_version unique (user_id, document, version);

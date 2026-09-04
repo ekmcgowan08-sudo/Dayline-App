@@ -119,8 +119,15 @@ five missed this because they simulated a service-role caller by
 running as the database superuser, which bypasses grant checks
 entirely; the fix is a straightforward set of grants, proven against
 real Postgres with a test that calls each function as the actual
-`service_role` role instead. See `docs/IMPLEMENTATION_STATUS.md` for
-the exact, honest verification tier on every piece.
+`service_role` role instead. Also since fixed: `acceptance_records`
+(the legal-consent audit trail) had no unique constraint, so an
+onboarding flow interrupted between the consent screen and the final
+onboarding step — which the app's own routing sends all the way back
+to the first screen, not wherever the user left off — could
+accumulate duplicate acceptance rows on retry; closed with a unique
+constraint plus an idempotent upsert that preserves the original
+acceptance timestamp. See `docs/IMPLEMENTATION_STATUS.md` for the
+exact, honest verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

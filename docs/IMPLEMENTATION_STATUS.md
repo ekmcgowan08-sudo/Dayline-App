@@ -1321,6 +1321,42 @@ since there is deliberately no admin dashboard yet (`LAUNCH_CHECKLIST.md`).
   instance, confirming all five moderator RPCs are actually callable by
   `service_role` there too, not just in this local sandbox.
 
+## Phase 42 — Fix duplicate acceptance_records rows on interrupted onboarding
+
+Found tracing the same "what happens on partial failure / retry" question
+this session has repeatedly applied elsewhere: `onboarding_completed_at`
+(`20260831080000_onboarding_flag.sql`) is only set at the very end of the
+onboarding flow, and the root route (`mobile/src/app/index.tsx`) sends
+any user without it all the way back to the *first* onboarding screen on
+every app launch — not back to wherever they left off. A user who
+accepts terms/privacy/rules/age on the consent screen (inserting 4 rows
+into `acceptance_records`), then has the app killed or crashes on a
+later onboarding screen before `onboarding_completed_at` is ever set,
+lands back on the consent screen on next launch and — since
+`acceptance_records` had no unique constraint — would insert 4 more
+duplicate rows on re-tapping "Agree and continue". Not a functional
+break (every row still records a true acceptance), but this table's own
+comment calls it an "immutable audit trail" of legal consent, and a real
+consent record shouldn't silently accumulate duplicates from a flow no
+user ever intended to "re-accept" anything through.
+
+- ✅ `supabase/migrations/20260902030000_acceptance_records_idempotent.sql`:
+  adds a unique constraint on `(user_id, document, version)`.
+- ✅ `mobile/src/services/legal.ts`: `recordAcceptance()` switched from a
+  plain `insert` to an `upsert(..., { onConflict: ..., ignoreDuplicates:
+  true })` — a retry no-ops rather than erroring or duplicating,
+  preserving the *first* `accepted_at` for each (user, document,
+  version), which is the legally-relevant timestamp.
+- ✅ `supabase/tests/acceptance_records_idempotent.test.sql` (new):
+  proves a retried consent pass stays at exactly 4 rows with the
+  original `accepted_at` preserved (not the retry's timestamp), and that
+  a genuinely new document version (e.g. updated Terms) still records as
+  its own row rather than being silently swallowed by the same
+  constraint. Verified against real Postgres 16.
+- ✅ Full local `run_all.sh` suite (all 22 test files) and mobile
+  typecheck/lint/all 39 tests rerun clean.
+- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+
 ---
 
 ## Environment constraints discovered this session
