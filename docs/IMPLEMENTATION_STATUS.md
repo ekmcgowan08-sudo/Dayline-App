@@ -1265,6 +1265,57 @@ inside User B's own timeline before that upload even happened.
   job — the `mobile` job's typecheck/lint/test steps all explicitly ran
   and passed, including the new `clips.test.ts` suite.
 
+## Phase 41 — Fix every moderator RPC being uncallable by service_role
+
+Found during a launch-readiness pass auditing which RPCs had zero test
+coverage: `moderator_suspend_user`/`moderator_reinstate_user` had none at
+all, which led to checking every `moderator_*` function's actual grants
+rather than assuming the pattern already established for
+`moderator_remove_content`/`moderator_resolve_report`/`moderator_warn_user`
+(all three "fixed" and tested earlier this session) was complete. It
+wasn't: **all five** moderator RPCs revoke `EXECUTE` from `public` and
+`authenticated` to lock them down from end users, but none of them ever
+grant it back to `service_role` — the actual role
+`MODERATION_RUNBOOK.md` instructs a moderator to call these with ("call
+it only via the service role key"). In plain PostgreSQL, `CREATE
+FUNCTION` grants `EXECUTE` to the `PUBLIC` pseudo-role by default, and
+every role — `service_role` included — is implicitly a member of
+`PUBLIC`. `revoke all ... from public` removes that implicit path for
+*every* role at once, not just the two named on the same line; only
+`check_rate_limit()`/`claim_next_montage_job()` correctly re-grant to
+`service_role` afterward, and none of the five moderator RPCs do.
+
+This is why the existing `moderator_*.test.sql` files never caught it:
+each deliberately simulates "how a service-role caller with no
+impersonated user sees `auth.uid()`" by running as the plain `postgres`
+superuser (see each file's own comment on this), which correctly
+exercises the function's internal logic but — since a superuser bypasses
+every `GRANT` check, not just RLS — never actually exercises whether the
+real `service_role` role can invoke the function *at all*. Net effect
+before this fix: every step of the moderation runbook (warn, remove
+content, suspend, reinstate, resolve report) was uncallable exactly as
+documented — this is the private beta's *only* moderation mechanism,
+since there is deliberately no admin dashboard yet (`LAUNCH_CHECKLIST.md`).
+
+- ✅ Proven against a real Postgres 16 instance before fixing:
+  `set role service_role; select moderator_warn_user(...);` (and the
+  other four) returned `ERROR: permission denied for function ...`.
+- ✅ `supabase/migrations/20260902020000_moderator_rpc_service_role_grants.sql`:
+  grants `EXECUTE` on all five moderator RPCs to `service_role`.
+- ✅ `supabase/tests/moderator_rpc_service_role_grants.test.sql` (new):
+  calls all five functions as the real `service_role` role (`set role
+  service_role`, not the superuser-bypass simulation the other test
+  files use) and asserts none raise `permission denied`, then confirms
+  the side effects actually landed (account reactivated after
+  suspend+reinstate, comment marked removed, report marked actioned) —
+  not just that the call didn't error. Verified this test actually
+  discriminates: reran the full migration set with this one fix
+  migration skipped and confirmed it fails with the exact
+  `permission denied for function moderator_warn_user` error, then
+  confirmed it passes with the fix included.
+- ✅ Full local `run_all.sh` suite (all 21 test files) reruns clean.
+- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+
 ---
 
 ## Environment constraints discovered this session

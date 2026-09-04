@@ -107,8 +107,20 @@ Phase 33), and would show up as an "Uploading…" row in that other
 user's own Today timeline before that even happened. Closed by
 stamping each queued clip with its capturing user's id and filtering
 every read/process of the queue to the currently signed-in user's own
-items. See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest
-verification tier on every piece.
+items. Also since fixed, and the most consequential finding of this
+kind so far: every single `moderator_*` RPC (warn, remove content,
+suspend, reinstate, resolve report) revoked access from ordinary users
+but never actually granted it back to `service_role` — the role the
+moderation runbook instructs a moderator to call these with — so the
+private beta's entire manual moderation process (its only moderation
+mechanism, since there's deliberately no admin dashboard yet) was
+uncallable exactly as documented. The existing tests for three of the
+five missed this because they simulated a service-role caller by
+running as the database superuser, which bypasses grant checks
+entirely; the fix is a straightforward set of grants, proven against
+real Postgres with a test that calls each function as the actual
+`service_role` role instead. See `docs/IMPLEMENTATION_STATUS.md` for
+the exact, honest verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

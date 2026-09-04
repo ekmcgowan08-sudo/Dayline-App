@@ -121,6 +121,15 @@ All three are also wired into `.github/workflows/ci.yml`.
   touched the `montages` storage bucket) and via a direct row delete (the
   general safety net this was built as), and that a montage with no
   `storage_path` yet is never queued.
+- `moderator_rpc_service_role_grants.test.sql` — proves all five
+  `moderator_*` RPCs (warn, remove content, suspend, reinstate, resolve
+  report) are actually callable by the real `service_role` database
+  role — the role `MODERATION_RUNBOOK.md` instructs a moderator to call
+  them with — not just by the migration-applying superuser the other
+  `moderator_*.test.sql` files simulate a service-role caller with
+  (which bypasses grant checks entirely, and so never caught that all
+  five were missing the `grant execute ... to service_role` their
+  `revoke all ... from public` needed to be paired with).
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 
