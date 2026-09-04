@@ -1314,7 +1314,12 @@ since there is deliberately no admin dashboard yet (`LAUNCH_CHECKLIST.md`).
   `permission denied for function moderator_warn_user` error, then
   confirmed it passes with the fix included.
 - ✅ Full local `run_all.sh` suite (all 21 test files) reruns clean.
-- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+- ✅ **Confirmed on real CI**: run 33907313648 (the 25th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `database` job's new "Run moderator RPC service-role grant
+  test suite" step explicitly ran and passed on a real Postgres
+  instance, confirming all five moderator RPCs are actually callable by
+  `service_role` there too, not just in this local sandbox.
 
 ---
 
