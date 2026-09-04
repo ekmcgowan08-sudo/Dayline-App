@@ -8,9 +8,7 @@ import { ENV } from '../constants/config';
  * This matches the recovered baseline's choice and is Supabase's own
  * documented approach for Expo/React Native (see
  * supabase.com/docs/guides/getting-started/quickstarts/expo-react-native).
- * It is unencrypted-at-rest on the device, same tradeoff most RN apps make;
- * `expo-secure-store` is reserved for smaller, higher-sensitivity values
- * (see lib/secureFlags.ts) since its storage is size-limited and slower.
+ * It is unencrypted-at-rest on the device, same tradeoff most RN apps make.
  */
 const asyncStorageAdapter: SupportedStorage = {
   getItem: (key) => AsyncStorage.getItem(key),
