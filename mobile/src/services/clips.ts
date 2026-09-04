@@ -18,11 +18,14 @@ export function newClientCaptureId(): string {
  * Adds a freshly recorded clip to the local pending-upload queue. The
  * clip's local file is never deleted until a confirmed successful upload
  * (see markUploaded), so a crash or force-quit mid-upload cannot lose it.
+ * Stamped with the capturing user's id — see QueuedClip.userId for why
+ * that matters on a shared device.
  */
-export function enqueueClipForUpload(localUri: string, durationMs: number): string {
+export function enqueueClipForUpload(userId: string, localUri: string, durationMs: number): string {
   const clientCaptureId = newClientCaptureId();
   useUploadQueueStore.getState().enqueue({
     clientCaptureId,
+    userId,
     localUri,
     durationMs,
     capturedAt: new Date().toISOString(),
@@ -117,13 +120,21 @@ async function matchClipToNearestSlot(userId: string, clientCaptureId: string, c
   }
 }
 
-/** Processes every queued/failed item whose backoff window has elapsed.
- * Call this on app foreground and after any manual "retry" action. */
+/** Processes every queued/failed item whose backoff window has elapsed
+ * AND belongs to the currently signed-in user — this queue is device-
+ * global, not per-account (see QueuedClip.userId), so on a shared device
+ * a previous user's still-queued clip must never be uploaded and
+ * attributed to whoever is signed in now. It stays queued, inert, until
+ * its rightful owner signs back in on this device. Call this on app
+ * foreground and after any manual "retry" action. */
 export async function processUploadQueue(userId: string): Promise<void> {
   const store = useUploadQueueStore.getState();
   const now = Date.now();
   const due = store.items.filter(
-    (i) => (i.status === 'queued' || i.status === 'failed') && (!i.nextAttemptAt || new Date(i.nextAttemptAt).getTime() <= now)
+    (i) =>
+      i.userId === userId &&
+      (i.status === 'queued' || i.status === 'failed') &&
+      (!i.nextAttemptAt || new Date(i.nextAttemptAt).getTime() <= now)
   );
 
   for (const item of due) {

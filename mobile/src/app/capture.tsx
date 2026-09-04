@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { CAPTURE } from '../constants/brand';
 import { spacing } from '../constants/theme';
 import { enqueueClipForUpload } from '../services/clips';
+import { useAuthStore } from '../state/auth-store';
 import { Button } from '../components/ui/Button';
 import { Text } from '../components/ui/Text';
 import { useTheme } from '../hooks/use-theme';
@@ -17,6 +18,7 @@ type Phase = 'ready' | 'recording' | 'reviewing';
 
 export default function Capture() {
   const theme = useTheme();
+  const userId = useAuthStore((s) => s.session?.user.id);
   const [camPerm, requestCamPerm] = useCameraPermissions();
   const [micPerm, requestMicPerm] = useMicrophonePermissions();
   const [facing, setFacing] = useState<'front' | 'back'>('back');
@@ -79,8 +81,8 @@ export default function Capture() {
   }
 
   function handleUse() {
-    if (!recordedUri) return;
-    enqueueClipForUpload(recordedUri, CAPTURE.clipSeconds * 1000);
+    if (!recordedUri || !userId) return;
+    enqueueClipForUpload(userId, recordedUri, CAPTURE.clipSeconds * 1000);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     router.back();
   }

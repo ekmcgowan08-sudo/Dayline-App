@@ -97,9 +97,18 @@ Storage's API. Closed with a stable per-job filename for the first,
 and a general delete-queues-for-purge trigger plus a new scheduled
 `purge-orphaned-montages` function for the second — the trigger fires
 on any montage row deletion, not just group deletion, so it also
-safety-nets any future deletion path. See
-`docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
-tier on every piece.
+safety-nets any future deletion path. Also since fixed: the mobile
+offline upload queue was device-global with no per-account
+namespacing at all — on a shared/borrowed device, a clip queued by
+one user that failed to upload could get silently uploaded and
+attributed to a different user who later signs in on the same device
+(the same "shared device" bug class the push-token fix closed in
+Phase 33), and would show up as an "Uploading…" row in that other
+user's own Today timeline before that even happened. Closed by
+stamping each queued clip with its capturing user's id and filtering
+every read/process of the queue to the currently signed-in user's own
+items. See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest
+verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

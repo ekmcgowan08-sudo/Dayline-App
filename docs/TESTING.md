@@ -149,6 +149,13 @@ remaining untested step, not the SQL itself.
   owner configures one). The real `@sentry/react-native` SDK is mocked in
   `mobile/jest.setup.js` — it leaves native-bridging timers open that
   Jest can't cleanly tear down, unrelated to this app's own code.
+  `mobile/src/services/__tests__/clips.test.ts` — 2 tests proving the
+  offline upload queue's per-user filtering: on a shared/borrowed
+  device, another still-signed-out user's queued-but-not-yet-uploaded
+  clip is never uploaded (or shown) under a different user's account,
+  and correctly resumes once its own owner is signed in again. Mocks
+  `../lib/supabase`/`../lib/storageUpload`/`expo-file-system` — pure
+  client-side queue logic, no live Supabase project needed.
 - **Component tests**: `mobile/src/components/ui/__tests__/Button.test.tsx`
   — press handling, disabled/loading states, accessibility state,
   rendered output, using `@testing-library/react-native` v14 (note: its

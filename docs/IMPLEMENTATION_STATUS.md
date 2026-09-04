@@ -1221,6 +1221,47 @@ bucket (unlike `purge-used-clips` for raw clips).
   `database` job's new "Run orphaned montage storage purge test suite"
   step passed on a real Postgres instance, not just this local sandbox.
 
+## Phase 40 — Fix cross-user upload-queue leak on a shared/borrowed device
+
+Found by applying the exact question that closed the push-token bug
+(Phase 33) to a different piece of on-device state: the mobile offline
+upload queue (`upload-queue-store.ts`) is a single, device-global,
+AsyncStorage-persisted list — it has never been namespaced by account.
+`useUploadQueueSync(userId)` always processes the queue with the
+*currently signed-in* user's id, and `processUploadQueue(userId)`
+uploaded every due item in the queue unconditionally. On a shared or
+borrowed device: User A records a clip that fails to upload (offline,
+app killed mid-upload) and stays queued; User A signs out; User B signs
+in on the same device. The very next upload-queue sync would silently
+upload User A's still-local, never-consented-to-share video and insert
+it into `clips` with `user_id` = **User B** — a real privacy/data-
+integrity bug, not theoretical, and the Today screen would additionally
+show User A's still-queued item as an "Uploading…"/"Upload failed" row
+inside User B's own timeline before that upload even happened.
+
+- ✅ `mobile/src/state/upload-queue-store.ts`: `QueuedClip` gained a
+  `userId` field, stamped at capture time.
+- ✅ `mobile/src/services/clips.ts`: `enqueueClipForUpload()` now takes
+  the capturing user's id; `processUploadQueue()` only processes items
+  whose `userId` matches the requesting user — another user's queued
+  item is left untouched (not deleted, not uploaded) until its rightful
+  owner signs back in on this device, so no data is lost or misattributed
+  either way.
+- ✅ `mobile/src/app/capture.tsx`: reads the signed-in user's id from
+  `useAuthStore` and passes it to `enqueueClipForUpload()`.
+- ✅ `mobile/src/app/(app)/today/index.tsx`: the "uploading" rows shown
+  on the Today timeline are now filtered to the current user's own
+  queue items, closing the client-UI-leak symptom of the same bug.
+- ✅ `mobile/src/services/__tests__/clips.test.ts` (new): proves
+  `processUploadQueue()` only uploads the requesting user's own items
+  and leaves another user's queued item alone, and that the leftover
+  item uploads correctly once its own owner calls it. Mocks
+  `../lib/supabase`/`../lib/storageUpload`/`expo-file-system` rather
+  than hitting real infrastructure — this is pure client-side queue
+  logic, no live Supabase project needed to verify it.
+- ✅ Mobile: typecheck/lint/all 39 tests (37 previous + 2 new) clean.
+- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+
 ---
 
 ## Environment constraints discovered this session

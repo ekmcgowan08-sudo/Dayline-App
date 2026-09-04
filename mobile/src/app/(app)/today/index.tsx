@@ -78,7 +78,10 @@ export default function Today() {
 
   const clipsById = new Map(clips.map((c) => [c.id, c]));
   const completedCount = slots.filter((s) => s.status === 'completed').length;
-  const uploadingItems = queueItems.filter((i) => i.status !== 'done');
+  // Filtered to this user's own items — the upload queue is device-global
+  // (see QueuedClip.userId), so on a shared device a previous user's
+  // still-queued clip must never show up in this user's own timeline.
+  const uploadingItems = queueItems.filter((i) => i.userId === userId && i.status !== 'done');
 
   const rows: Row[] = [
     ...slots.map((slot): Row => ({ kind: 'slot', slot, clip: slot.clip_id ? clipsById.get(slot.clip_id) ?? null : null })),
