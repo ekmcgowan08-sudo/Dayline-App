@@ -149,9 +149,21 @@ render pipeline, real `npm`/`eslint`/`tsc`/`jest` runs — see
     RevenueCat's current live docs (written from a web-search summary in
     this session — flagged explicitly in the function's own comments,
     see `docs/DECISIONS.md`).
-18. **Network access to GitHub Actions**: confirm `.github/workflows/ci.yml`
-    actually runs green on real infrastructure (only YAML-syntax-validated
-    in this session).
+18. **Network access to GitHub Actions is now done, the same way item 15's
+    Docker build is** — checked directly rather than assumed. An earlier,
+    more network-restricted development sandbox wrote this item as open;
+    a later session had real GitHub API access and used it repeatedly:
+    every commit on this branch has been pushed, then confirmed green
+    job-by-job (all 7: mobile, worker, worker-docker-build, database,
+    edge-functions-typecheck, dependency-audit, secret-scan) via
+    `list_workflow_runs`/`list_workflow_jobs` against the actual run, not
+    inferred from a green checkmark — see the "Confirmed on real CI"
+    entries throughout `docs/IMPLEMENTATION_STATUS.md` (24+ consecutive
+    clean runs as of this writing). One real, reproducible flake was
+    found and handled this way too: the `worker` job's `apt-get install
+    ffmpeg` step twice hung indefinitely on a GitHub-hosted runner —
+    unrelated to this repo's code (every other job passed cleanly both
+    times) — resolved by cancelling and re-running the workflow.
 19. **Network access to sentry.io**: confirm a real event round-trips end
     to end once `EXPO_PUBLIC_SENTRY_DSN` is set (item 9 above) — the
     integration code is real and unit-tested for its no-op path, but no

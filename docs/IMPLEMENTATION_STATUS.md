@@ -1260,7 +1260,10 @@ inside User B's own timeline before that upload even happened.
   than hitting real infrastructure — this is pure client-side queue
   logic, no live Supabase project needed to verify it.
 - ✅ Mobile: typecheck/lint/all 39 tests (37 previous + 2 new) clean.
-- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+- ✅ **Confirmed on real CI**: run 33906375794 (the 24th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `mobile` job's typecheck/lint/test steps all explicitly ran
+  and passed, including the new `clips.test.ts` suite.
 
 ---
 
