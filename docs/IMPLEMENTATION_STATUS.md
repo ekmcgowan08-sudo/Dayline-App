@@ -1412,7 +1412,11 @@ with no way forward short of leaving and re-entering the screen.
   frozen-poll symptom — then re-ran clean once the fix was restored.
 - ✅ Full local mobile suite (`npm run typecheck`, `npm run lint`, `npm test
   -- --ci --coverage`) reruns clean: 8 suites, 40 tests, exit code 0.
-- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+- ✅ **Confirmed on real CI**: run 33909985556 (the 27th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `mobile` job's `npm test -- --ci --coverage` step (which
+  includes the new `montage/__tests__/id.test.tsx` suite) explicitly
+  passed, not just inferred from the run's overall summary status.
 
 ---
 
