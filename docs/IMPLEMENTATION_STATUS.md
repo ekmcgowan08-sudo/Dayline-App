@@ -1355,7 +1355,12 @@ user ever intended to "re-accept" anything through.
   constraint. Verified against real Postgres 16.
 - ✅ Full local `run_all.sh` suite (all 22 test files) and mobile
   typecheck/lint/all 39 tests rerun clean.
-- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+- ✅ **Confirmed on real CI**: run 33908413408 (the 26th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `database` job's new "Run acceptance records idempotency
+  test suite" step explicitly ran and passed on a real Postgres 16
+  instance (18:55:26–18:55:27Z), not just inferred from the run's
+  overall summary status.
 
 ---
 
