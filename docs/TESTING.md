@@ -172,6 +172,11 @@ remaining untested step, not the SQL itself.
   and correctly resumes once its own owner is signed in again. Mocks
   `../lib/supabase`/`../lib/storageUpload`/`expo-file-system` — pure
   client-side queue logic, no live Supabase project needed.
+  `mobile/src/lib/__tests__/passwordResetLink.test.ts` — 5 tests for the
+  pure function that parses Supabase's recovery-link URL fragment
+  (`#access_token=...&type=recovery`) into tokens: a real link, a link
+  with no fragment, a non-recovery `type`, a missing token, and null
+  input.
 - **Component tests**: `mobile/src/components/ui/__tests__/Button.test.tsx`
   — press handling, disabled/loading states, accessibility state,
   rendered output, using `@testing-library/react-native` v14 (note: its
@@ -189,6 +194,18 @@ remaining untested step, not the SQL itself.
   module the screen imports (`expo-video`, `expo-router`,
   `expo-media-library`, `expo-sharing`, `expo-file-system/legacy`, and this
   app's own service modules).
+  `mobile/src/app/__tests__/reset-password.test.tsx` — 2 tests for the
+  password-reset deep-link screen: a valid recovery link results in
+  `supabase.auth.setSession()` being called with the exact tokens parsed
+  from the URL and the "Set a new password" form rendering (proving the
+  screen's deliberate placement as a top-level route, outside `(auth)/`,
+  actually avoids `(auth)/_layout.tsx`'s "already signed in? redirect to
+  /" check firing the instant the recovery session makes it look signed
+  in); an invalid/tokenless link surfaces an "isn't valid" message
+  instead of hanging on a permanent spinner. See
+  `docs/IMPLEMENTATION_STATUS.md` Phase 44 for the bug this closes — the
+  entire "forgot password" flow had no code path to actually complete a
+  reset.
 - Run: `npm test` (or `npm run test:watch` while iterating).
 - **Not yet covered by automated tests** (reviewed/typechecked only): the
   full onboarding → capture → upload → montage flow end-to-end (the

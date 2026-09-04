@@ -1420,6 +1420,78 @@ with no way forward short of leaving and re-entering the screen.
 
 ---
 
+## Phase 44 — Fix "Forgot password?" being a complete dead end
+
+Found continuing the launch-readiness audit into the auth screens.
+`(auth)/forgot-password.tsx` calls `useAuthStore().requestPasswordReset()`,
+which calls Supabase's real `resetPasswordForEmail(email, { redirectTo:
+'dayline://reset-password' })` — this part genuinely sends a real email
+with a real recovery link. But nothing anywhere in the codebase handled
+that link: there was no `reset-password` route (confirmed via a full-repo
+grep for `reset-password`/`updateUser`/`setSession` — zero matches besides
+the one line sending the request), so tapping the email's link opened the
+app to no matching screen, and no code path anywhere ever called
+`supabase.auth.updateUser({ password })` to actually change the password.
+The entire "forgot password" feature was decorative: it could send an
+email but the user had no way to complete a reset through the app,
+period — a fully broken core account-recovery flow, not a partial one.
+
+Root cause once traced further: this Supabase client uses the default
+`implicit` auth flow (`lib/supabase.ts` doesn't override `flowType`), so
+the recovery link puts its tokens in the URL **fragment**
+(`#access_token=...&type=recovery`), not a `?code=` query param. Expo
+Router's route params only ever surface query-string values, so even a
+naive route handler reading `useLocalSearchParams()` would never have
+seen the tokens — the fragment has to be parsed from the raw URL.
+
+- ✅ `mobile/src/lib/passwordResetLink.ts` (new): pure
+  `parseRecoveryTokensFromUrl()` function extracting `access_token`/
+  `refresh_token` from the URL fragment, gated on `type=recovery` (so a
+  magic-link or invite URL sharing this app's scheme is never
+  misinterpreted as a password-reset session). Pulled out as a pure
+  function, in the same spirit as `notificationRouting.ts`, so the
+  actual parsing logic is unit-tested without pulling in
+  `expo-linking`/`lib/supabase.ts`.
+- ✅ `mobile/src/app/reset-password.tsx` (new): reads the deep link via
+  both `Linking.getInitialURL()` (the cold-start case — realistically the
+  common one for tapping an email link) and an `addEventListener('url',
+  ...)` listener (the warm-app case), calls `supabase.auth.setSession()`
+  with the recovered tokens, then lets the user set and confirm a new
+  password via `supabase.auth.updateUser({ password })`. Falls back to an
+  "this link isn't valid" message after a 4-second grace period if no
+  valid recovery link ever arrives, rather than leaving the user on a
+  permanent spinner. Deliberately placed as a **top-level route** (not
+  nested under `(auth)/`) — `(auth)/_layout.tsx` redirects away the
+  instant `useAuthStore().session` is non-null, and establishing the
+  recovery session via `setSession()` does exactly that; a screen nested
+  under `(auth)/` would bounce the user straight back to the main app
+  before they could ever see the "set a new password" form.
+- ✅ `mobile/src/lib/__tests__/passwordResetLink.test.ts` (new): 5 tests
+  covering a real recovery link, a link with no fragment, a non-recovery
+  `type` (e.g. a magic-link), a link missing one of the two tokens, and
+  null/undefined input.
+- ✅ `mobile/src/app/__tests__/reset-password.test.tsx` (new): 2 tests —
+  proves a valid recovery link results in `setSession()` being called
+  with the exact tokens from the URL and the "Set a new password" form
+  rendering (proving the top-level-route placement actually avoids the
+  `(auth)` redirect-on-session collision described above, not just that
+  the pure parsing function works in isolation); and proves a link
+  without recovery tokens surfaces the "isn't valid" message instead of
+  an infinite spinner.
+- ✅ Full local mobile suite (`npm run typecheck`, `npm run lint`, `npm
+  test -- --ci --coverage`) reruns clean: 10 suites, 47 tests, exit code
+  0.
+- ✅ `docs/OWNER_ACTIONS_REQUIRED.md`: added a "not required, but worth
+  knowing about" note that the email link uses a custom URL scheme
+  (`dayline://`) rather than a Universal Link/App Link, which some mail
+  clients (Gmail's app has a known history of this) don't reliably open
+  from inside the mail app itself — a platform/mail-client limitation,
+  not something this app's code can fix, and not blocking for an
+  invite-only beta.
+- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:

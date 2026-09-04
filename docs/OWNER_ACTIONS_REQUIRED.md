@@ -178,6 +178,21 @@ render pipeline, real `npm`/`eslint`/`tsc`/`jest` runs — see
 - Placeholder app icon/splash images (Expo template defaults) — see
   `docs/ASSET_LICENSES.md`. Cosmetic, not blocking, but should change
   before any store submission.
+- **Password reset email links use a custom URL scheme (`dayline://`),
+  not a Universal Link/App Link.** The app-side handling is real and
+  tested (`mobile/src/app/reset-password.tsx` — see
+  `docs/IMPLEMENTATION_STATUS.md` Phase 44), but some mail clients
+  (Gmail's app in particular, on both platforms, has a history of this)
+  are known to not reliably open custom-scheme links tapped from inside
+  the mail app itself, sometimes requiring "open in browser" first or
+  simply refusing. This is a platform/mail-client limitation, not
+  something fixable in this app's code — the production-grade fix is a
+  real Universal Link (iOS) / App Link (Android): host an
+  `apple-app-site-association`/`assetlinks.json` file on a real domain
+  and add the associated-domains entitlement, which needs a live domain
+  this sandbox doesn't have. Worth doing before a public launch if
+  password reset volume matters; not blocking for an invite-only beta
+  where support can walk someone through it manually.
 
 ---
 

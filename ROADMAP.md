@@ -136,9 +136,22 @@ before that state's first async fetch had resolved; since the effect's
 only dependency never changed again for the life of the screen, it never
 got a chance to close over a fresher value. A user hitting a dropped
 Realtime connection had no way forward off "Your day is coming together"
-short of leaving and re-entering the screen. See
-`docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification tier on
-every piece.
+short of leaving and re-entering the screen. Also since fixed, and the
+most user-facing finding of this kind so far: "Forgot password?" was a
+complete dead end — it genuinely sent a real recovery email, but nothing
+in the app handled the link it contained, and no code anywhere called
+`supabase.auth.updateUser({ password })` to actually change it; a user
+who forgot their password had no way to get back into their account
+through the app at all. Closed with a new top-level `reset-password`
+screen that parses the recovery tokens Supabase puts in the link's URL
+fragment (this client's default `implicit` auth flow, not query-string
+params Expo Router would have surfaced automatically), establishes the
+recovery session, and lets the user set a new password — deliberately
+placed outside the `(auth)/` route group, since that layout redirects
+away the instant a session exists, which establishing the recovery
+session itself would otherwise trigger before the user ever saw the
+form. See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest
+verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 
