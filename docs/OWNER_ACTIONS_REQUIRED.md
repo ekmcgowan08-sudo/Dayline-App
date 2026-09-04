@@ -22,7 +22,7 @@ and pasted a few tokens into this repo's secrets
 | Workflow | What it needs from you | What it does |
 |---|---|---|
 | `ci.yml` | Nothing (already runs automatically) | Real typecheck/lint/tests for mobile + worker, a **real Docker image build** of the worker, real Postgres 16 + RLS test suite, Deno typecheck, dependency audit, secret scan |
-| `deploy-supabase.yml` | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`, `SUPABASE_FUNCTIONS_ENV` | Links your Supabase project, runs every migration, deploys all 9 Edge Functions, sets their secrets |
+| `deploy-supabase.yml` | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`, `SUPABASE_FUNCTIONS_ENV` | Links your Supabase project, runs every migration, deploys all 10 Edge Functions, sets their secrets |
 | `eas-build.yml` | `EXPO_TOKEN`, `MOBILE_ENV_FILE` | Builds the actual mobile app on Expo's cloud — an iOS Simulator build (no Apple Developer account needed) and/or an installable Android APK, no Xcode/Android Studio/Docker required anywhere |
 | `verify-sentry.yml` | `SENTRY_DSN` | Sends a real event straight to Sentry's ingest API and fails the job unless Sentry actually accepts it |
 
@@ -42,7 +42,7 @@ reference and for anyone who prefers running them locally.
    hand:
    - `supabase link --project-ref <ref> && supabase db push` to apply
      every migration in `supabase/migrations/`.
-   - Deploy the 9 Edge Functions in `supabase/functions/` (commands in
+   - Deploy the 10 Edge Functions in `supabase/functions/` (commands in
      `README.md`/`docs/DEPLOYMENT.md`).
    - Set secrets via `supabase secrets set --env-file supabase/functions/.env`
      (fill in real values first — see `supabase/functions/.env.example`).

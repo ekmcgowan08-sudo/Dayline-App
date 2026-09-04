@@ -91,7 +91,9 @@ cd worker && npm run typecheck && npm run build && npm test  # needs ffmpeg inst
 
 See `docs/TESTING.md` for what each suite actually proves, and exactly
 what remains unverified in this environment (camera/device flows, live
-Supabase calls, Docker image build, RevenueCat's live webhook shape).
+Supabase calls, RevenueCat's live webhook shape — the render worker's
+Docker image itself now builds and is confirmed on every push via
+`ci.yml`'s `worker-docker-build` job, see `docs/OWNER_ACTIONS_REQUIRED.md`).
 
 ## Stack
 
@@ -105,9 +107,10 @@ recovered prototype vs. replaced).
 ## Contributing / resuming this work
 
 Read, in order: `docs/IMPLEMENTATION_STATUS.md` (what's done, what's
-next), `docs/DECISIONS.md` (why things are the way they are, including
-three real bugs found by actually running the tests), then the specific
-area you're touching. `docs/OWNER_ACTIONS_REQUIRED.md` is the single
+next, and a running record of real bugs found — not just theorized —
+by actually running the tests and probing real Postgres/CI, each with
+its fix and how it was verified), `docs/DECISIONS.md` (why things are
+the way they are), then the specific area you're touching. `docs/OWNER_ACTIONS_REQUIRED.md` is the single
 consolidated checklist of everything that needs a human with real
 account access, payment authorization, or legal judgment — nothing else
 should be blocked on the owner.

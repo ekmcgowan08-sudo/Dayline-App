@@ -14,8 +14,10 @@
 ┌────────────────┐                                    │ service role
 │  Edge Functions │ ───────────────────────────────────┘
 │  (trusted)      │
-│  request-montage, get-montage-url, delete-account,
-│  revenuecat-webhook, transcribe
+│  request-montage, get-montage-url, get-export-url,
+│  delete-account, revenuecat-webhook, transcribe,
+│  send-capture-reminders, purge-used-clips,
+│  purge-orphaned-montages, fulfill-data-export
 └────────────────┘
 
 ┌────────────────┐   polls montages table (service role)
