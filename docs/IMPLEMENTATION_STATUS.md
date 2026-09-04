@@ -1364,6 +1364,58 @@ user ever intended to "re-accept" anything through.
 
 ---
 
+## Phase 43 — Fix the montage reveal screen's poll fallback never actually polling
+
+Found auditing the montage reveal screen
+(`mobile/src/app/(app)/montage/[id].tsx`) as part of the broader
+launch-readiness sweep. Its own comment describes a deliberate two-layer
+strategy: Supabase Realtime pushes a `montages` row update the instant a
+render finishes, with a `setInterval` poll as "a safety net while
+processing" in case Realtime — explicitly documented elsewhere
+(`mobile/src/services/montages.ts`) as best-effort and never verified
+against a live Supabase project in this sandbox — doesn't deliver.
+
+The poll never actually ran. It lived inside a `useEffect` whose
+dependency array was `[id]` only, so the effect (and the `setInterval`
+callback closure it created) ran exactly once, at the render where `id`
+first becomes available — the same render where `montage` state is still
+its initial `null` (the separate fetch-on-mount effect that eventually
+populates it is asynchronous and hasn't resolved yet). Because `id` never
+changes for the screen's lifetime, this effect never re-ran, so the
+interval's `if (montage?.status === 'processing' || ...)` guard evaluated
+against that permanently-stale `null` forever: `undefined === 'processing'`
+is always `false`. If Realtime ever failed to deliver a single update —
+a dropped connection, an app backgrounded across the render's completion,
+or simply Realtime never having been verified end-to-end at all in this
+build — a user would be stuck on "Your day is coming together" forever
+with no way forward short of leaving and re-entering the screen.
+
+- ✅ `mobile/src/app/(app)/montage/[id].tsx`: split the single `[id]`-keyed
+  effect into two — one that only manages the Realtime subscription, and a
+  second, separate effect keyed on `[montage?.status, refresh]` that creates
+  the poll interval only while status is `'processing'`/`'retrying'` and
+  tears it down otherwise. Because this effect's own dependency is the
+  status itself, it always closes over the current value — the exact class
+  of stale-closure bug this shape avoids by construction, not just for this
+  one call site.
+- ✅ `mobile/src/services/montages.ts`: fixed `subscribeToMontage()`'s own
+  doc comment, which read as a garbled sentence ("Falls back to polling is
+  not implemented client-side") that this audit traced back to actual
+  behavior while investigating the bug above.
+- ✅ `mobile/src/app/(app)/montage/__tests__/id.test.tsx` (new): renders the
+  screen with Realtime mocked to never deliver an update (exactly the
+  failure mode this bug leaves unrecoverable) and a montage stuck in
+  `'processing'`, then advances fake timers by two 4-second poll intervals,
+  asserting `getMontage` is called a 2nd and 3rd time. Proved this test
+  discriminates by running it against the pre-fix code (via `git stash`) —
+  it failed with "Expected number of calls: 2, Received: 1", exactly the
+  frozen-poll symptom — then re-ran clean once the fix was restored.
+- ✅ Full local mobile suite (`npm run typecheck`, `npm run lint`, `npm test
+  -- --ci --coverage`) reruns clean: 8 suites, 40 tests, exit code 0.
+- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:

@@ -178,11 +178,24 @@ remaining untested step, not the SQL itself.
   `render()` is `async` — every test must `await render(...)` or
   `screen` queries silently see no rendered tree; this tripped up the
   first draft of this suite and is worth knowing before adding more).
+- **Screen tests**: `mobile/src/app/(app)/montage/__tests__/id.test.tsx` —
+  renders the montage reveal screen with Realtime mocked to never deliver
+  an update (the one failure mode where the screen's poll fallback is the
+  only thing that can move it past "processing") and advances fake timers
+  across two 4-second poll ticks, asserting the poll actually re-fetches.
+  Written to catch a real regression this session found: the poll's
+  `setInterval` closed over stale `null` state and never fired at all — see
+  `docs/IMPLEMENTATION_STATUS.md` Phase 43. Mocks every service/native
+  module the screen imports (`expo-video`, `expo-router`,
+  `expo-media-library`, `expo-sharing`, `expo-file-system/legacy`, and this
+  app's own service modules).
 - Run: `npm test` (or `npm run test:watch` while iterating).
-- **Not yet covered by automated tests** (reviewed/typechecked only):
-  screen-level integration tests for the full onboarding → capture →
-  upload → montage flow, and anything requiring a camera, a real Supabase
-  project, or a simulator — see the gaps list below.
+- **Not yet covered by automated tests** (reviewed/typechecked only): the
+  full onboarding → capture → upload → montage flow end-to-end (the
+  montage reveal screen's poll fallback above is a targeted regression
+  test, not a full integration test of that flow), and anything requiring
+  a camera, a real Supabase project, or a simulator — see the gaps list
+  below.
 
 ## Render worker tests
 

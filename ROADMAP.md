@@ -126,8 +126,19 @@ onboarding step — which the app's own routing sends all the way back
 to the first screen, not wherever the user left off — could
 accumulate duplicate acceptance rows on retry; closed with a unique
 constraint plus an idempotent upsert that preserves the original
-acceptance timestamp. See `docs/IMPLEMENTATION_STATUS.md` for the
-exact, honest verification tier on every piece.
+acceptance timestamp. Also since fixed: the montage reveal screen's
+poll-fallback safety net — meant to keep working if Supabase Realtime
+(explicitly documented elsewhere as best-effort and never verified
+end-to-end in this sandbox) ever failed to deliver a status update — never
+actually polled at all, because its `setInterval` closed over `montage`
+state from the render where the effect first ran, which was always
+before that state's first async fetch had resolved; since the effect's
+only dependency never changed again for the life of the screen, it never
+got a chance to close over a fresher value. A user hitting a dropped
+Realtime connection had no way forward off "Your day is coming together"
+short of leaving and re-entering the screen. See
+`docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification tier on
+every piece.
 
 ## Milestone 2 — Production hardening
 

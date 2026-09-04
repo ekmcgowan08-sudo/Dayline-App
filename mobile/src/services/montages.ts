@@ -34,9 +34,12 @@ export async function getMontagePlaybackUrl(montageId: string): Promise<MontageU
   return { ok: true, status: data.status, errorCode: data.errorCode ?? null };
 }
 
-/** Subscribes to realtime status changes for one montage row. Falls back to
- * polling is not implemented client-side — Supabase Realtime (Postgres
- * changes) is used directly since it's already part of the platform. */
+/** Subscribes to realtime status changes for one montage row via Supabase
+ * Realtime (Postgres changes) — already part of the platform, so no
+ * separate polling transport is implemented here. This is best-effort: the
+ * caller (mobile/src/app/(app)/montage/[id].tsx) is expected to run its own
+ * poll as a fallback in case a realtime connection never delivers an
+ * update. */
 export function subscribeToMontage(montageId: string, onChange: (montage: Montage) => void) {
   const channel = supabase
     .channel(`montage-${montageId}`)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -48,7 +48,6 @@ export default function MontageReveal() {
   const [comments, setComments] = useState<CommentWithAuthor[]>([]);
   const [commentText, setCommentText] = useState('');
   const [postingComment, setPostingComment] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const player = useVideoPlayer(playbackUrl ?? null, (p) => {
     p.loop = false;
@@ -82,17 +81,24 @@ export default function MontageReveal() {
       setMontage(updated);
       if (updated.status === 'ready') refresh();
     });
-    // Realtime is best-effort in this environment (no live Supabase project
-    // to verify against) — a light poll is a safety net while processing.
-    pollRef.current = setInterval(() => {
-      if (montage?.status === 'processing' || montage?.status === 'retrying') refresh();
-    }, 4000);
-    return () => {
-      unsubscribe();
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+    return unsubscribe;
+  }, [id, refresh]);
+
+  // Realtime is best-effort in this environment (no live Supabase project to
+  // verify against) — this poll is the safety net while processing. It's a
+  // separate effect (rather than folded into the subscribe effect above,
+  // keyed only on `id`) specifically so it re-arms whenever `montage.status`
+  // actually changes: a poll interval created once at mount and gated on
+  // `montage?.status` inside its callback would close over `montage` from
+  // that initial render — still `null`, since the fetch-on-mount `refresh()`
+  // above hasn't resolved yet — and since `id` never changes for this
+  // screen's lifetime, that effect would never rerun to pick up a fresher
+  // value, permanently disabling the fallback.
+  useEffect(() => {
+    if (montage?.status !== 'processing' && montage?.status !== 'retrying') return;
+    const interval = setInterval(refresh, 4000);
+    return () => clearInterval(interval);
+  }, [montage?.status, refresh]);
 
   useEffect(() => {
     if (montage?.status === 'ready' && playbackUrl) player.play();
