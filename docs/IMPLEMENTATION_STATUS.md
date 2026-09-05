@@ -1488,7 +1488,12 @@ seen the tokens — the fragment has to be parsed from the raw URL.
   from inside the mail app itself — a platform/mail-client limitation,
   not something this app's code can fix, and not blocking for an
   invite-only beta.
-- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+- ✅ **Confirmed on real CI**: run 33911100198 (the 28th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `mobile` job's `npm test -- --ci --coverage` step (which
+  includes both new `passwordResetLink.test.ts` and
+  `reset-password.test.tsx` suites) explicitly passed, not just inferred
+  from the run's overall summary status.
 
 ---
 
