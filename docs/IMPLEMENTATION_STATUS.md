@@ -1497,6 +1497,49 @@ seen the tokens — the fragment has to be parsed from the raw URL.
 
 ---
 
+## Phase 45 — Fix uploadAvatar() leaking one storage object per profile-photo change
+
+Found continuing the launch-readiness audit into `settings/profile.tsx`
+and its `services/profile.ts`. `uploadAvatar()` named every upload
+`${userId}/avatar-${Date.now()}.${ext}` — a fresh, timestamped path on
+every call — despite explicitly passing `upsert: true` to
+`uploadLocalFile()`. `upsert` only overwrites an object already at the
+same path; a new path every time defeats it entirely, so every time a
+user changed their profile photo, the previous one stayed in the
+`avatars` bucket forever with nothing referencing it. The same storage-
+leak class already found and fixed twice this session for other buckets
+(Phase 10's `purge-used-clips`, Phase 39's montage storage leak) — small
+per file (compressed JPEGs, not video), but unbounded and indefinite:
+one orphaned file per photo change, for every user, forever.
+
+The likely original intent of the timestamp was cache-busting — a
+stable path's public URL would otherwise risk showing a stale cached
+image after a change — so the fix keeps that property without the
+storage cost.
+
+- ✅ `mobile/src/services/profile.ts`: `uploadAvatar()` now uploads to a
+  stable `${userId}/avatar` path (no extension, no timestamp) every
+  time, so `upsert: true` actually overwrites the previous object in
+  place. The returned public URL still gets a `?t=<timestamp>` query
+  string appended, so a viewer's HTTP/CDN cache (keyed on the full URL)
+  still sees a fresh URL after every change — cache-busting preserved,
+  storage leak closed.
+- ✅ `mobile/src/services/__tests__/profile.test.ts` (new): 2 tests —
+  two uploads with different local files both resolve to the identical
+  stable storage path with `upsert: true` still passed; and the two
+  calls still return different (cache-busted) public URLs despite the
+  identical underlying path. Proved this test discriminates by running
+  it against the pre-fix code (via `git stash`) — the path-stability
+  assertion failed with the old code's actual timestamped path
+  (`.../avatar-1788928809662.jpg`) where a stable `.../avatar` was
+  expected — then re-ran clean once the fix was restored.
+- ✅ Full local mobile suite (`npm run typecheck`, `npm run lint`, `npm
+  test -- --ci --coverage`) reruns clean: 11 suites, 49 tests, exit code
+  0.
+- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:

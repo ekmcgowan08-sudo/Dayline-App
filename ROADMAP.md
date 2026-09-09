@@ -150,8 +150,16 @@ recovery session, and lets the user set a new password — deliberately
 placed outside the `(auth)/` route group, since that layout redirects
 away the instant a session exists, which establishing the recovery
 session itself would otherwise trigger before the user ever saw the
-form. See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest
-verification tier on every piece.
+form. Also since fixed: `uploadAvatar()` named every profile-photo
+upload with a fresh timestamped storage path, so despite passing
+`upsert: true` — meant to overwrite a previous upload at the same path
+— every photo change left the previous one orphaned in the `avatars`
+bucket forever, the same unbounded-storage-leak class already closed
+twice this session for other buckets. Closed with a stable per-user
+path (upsert now actually overwrites) plus a cache-busting query
+string on the returned URL, so a changed photo still shows immediately
+rather than a stale cached one. See `docs/IMPLEMENTATION_STATUS.md` for
+the exact, honest verification tier on every piece.
 
 ## Milestone 2 — Production hardening
 

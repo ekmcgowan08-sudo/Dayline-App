@@ -177,6 +177,12 @@ remaining untested step, not the SQL itself.
   (`#access_token=...&type=recovery`) into tokens: a real link, a link
   with no fragment, a non-recovery `type`, a missing token, and null
   input.
+  `mobile/src/services/__tests__/profile.test.ts` — 2 tests proving
+  `uploadAvatar()` uploads every profile photo to the same stable
+  per-user storage path (so `upsert: true` actually overwrites the
+  previous one instead of leaking a new object per change — see
+  `docs/IMPLEMENTATION_STATUS.md` Phase 45) while still returning a
+  different, cache-busted public URL on every call.
 - **Component tests**: `mobile/src/components/ui/__tests__/Button.test.tsx`
   — press handling, disabled/loading states, accessibility state,
   rendered output, using `@testing-library/react-native` v14 (note: its
