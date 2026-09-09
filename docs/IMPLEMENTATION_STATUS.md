@@ -1590,7 +1590,12 @@ containing nothing but a blank date card.
   was restored.
 - ✅ Full local worker suite (`npm run typecheck`, `npm run build`, `npm
   test`) reruns clean: 15 tests (up from 14), 0 failures.
-- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+- ✅ **Confirmed on real CI**: run 34312569943 (the 30th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `worker` job's `npm test` step (the first time
+  `--experimental-test-module-mocks` and the new `runJob.test.ts` suite
+  ran in the real CI environment, not just locally) explicitly passed,
+  not just inferred from the run's overall summary status.
 
 ---
 
