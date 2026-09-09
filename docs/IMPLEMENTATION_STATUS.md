@@ -1536,7 +1536,11 @@ storage cost.
 - ✅ Full local mobile suite (`npm run typecheck`, `npm run lint`, `npm
   test -- --ci --coverage`) reruns clean: 11 suites, 49 tests, exit code
   0.
-- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+- ✅ **Confirmed on real CI**: run 34312010948 (the 29th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `mobile` job's `npm test -- --ci --coverage` step (which
+  includes the new `profile.test.ts` suite) explicitly passed, not just
+  inferred from the run's overall summary status.
 
 ---
 
