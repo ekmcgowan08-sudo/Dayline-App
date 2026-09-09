@@ -1544,6 +1544,56 @@ storage cost.
 
 ---
 
+## Phase 46 — Fix the render worker delivering a "successful" montage with zero real clips
+
+Found continuing the launch-readiness audit into the worker's remaining
+unread files (`poller.ts`, `downloadClip.ts`, `supabaseAdmin.ts`,
+`config.ts`, `ffmpegExec.ts`, `pipeline.ts`) alongside a closer read of
+`runJob.ts`. `runJob.ts` already guards the case where every eligible
+clip fails to *download* (treated as a retryable failure, per its own
+comment). It never guarded the analogous case one step later: every
+clip downloading fine but failing to *normalize* (ffprobe/ffmpeg can't
+read it — corrupt or malformed video). `renderMontage()` itself doesn't
+treat an all-clips-skipped render as an error as long as a title card is
+present — confirmed by an *existing* test in `pipeline.test.ts`
+("renderMontage does NOT append credits/end card when every clip is
+skipped (title-card-only output)"), which already proves, against real
+ffmpeg, that `renderedClipPaths` comes back empty in exactly this case
+without `renderMontage` throwing. `runJob.ts` never checked for that
+before finalizing: it uploaded the title-card-only video as the
+finished montage and marked the row `status: 'ready'` with
+`clip_count: 0` — a "Your Day Is Ready" push and a "successful" montage
+containing nothing but a blank date card.
+
+- ✅ `worker/src/render/runJob.ts`: added a check right after
+  `renderMontage()` returns — if `result.renderedClipPaths.length === 0`,
+  fail the job the same way as the existing all-downloads-failed guard
+  (`ErrorCode.ClipDownloadFailed`, retryable) instead of uploading and
+  finalizing it, before any upload or database write happens.
+- ✅ `worker/src/render/__tests__/runJob.test.ts` (new): the worker's
+  first test exercising `runJob()` itself (previously only its pure
+  rendering pipeline was unit-tested) — uses Node's built-in
+  `node:test` `mock.module()` (needs `--experimental-test-module-mocks`,
+  added to `worker/package.json`'s `test` script) to stub every one of
+  `runJob`'s dependencies (`fetchEligibleClips`, `downloadClipToFile`,
+  `renderMontage`, `uploadMontageFile`, `getEntitlement`,
+  `sendMontageReadyPush`/`sendGroupMontageReadyPush`, `supabaseAdmin`),
+  simulating exactly the bug scenario (`renderMontage` resolving with
+  `renderedClipPaths: []`). Asserts `uploadMontageFile` and the "ready"
+  push are never called, and the `montages` row update is `status:
+  'retrying'`, `error_code: 'clip_download_failed'` — never `'ready'`.
+  Proved this test discriminates by running it against the pre-fix code
+  (via `git stash push -- worker/src/render/runJob.ts`, keeping the new
+  test and the package.json flag) — it failed with "must not upload a
+  title-card-only video... 1 !== 0" and the real log line
+  `"montage rendered","clipCount":0` — then re-ran clean once the fix
+  was restored.
+- ✅ Full local worker suite (`npm run typecheck`, `npm run build`, `npm
+  test`) reruns clean: 15 tests (up from 14), 0 failures.
+- ⬜ Not yet confirmed on real CI as of this writing — pending push.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:

@@ -239,14 +239,27 @@ committed to the repo. It proves, by actually invoking ffmpeg and
   omitted when every clip fails to render (title-card-only output).
 - Both the "abort the whole job" and "no usable segments" failure paths.
 
-It does **not** exercise the Supabase download/upload/job-claim code
-paths (`worker/src/render/downloadClip.ts`, `fetchEligibleClips.ts`,
-`runJob.ts`'s Supabase calls, `poller.ts`) — those need a real Supabase
-project. The worker binary itself (health server, structured logging,
-poll loop, SIGTERM shutdown) was run directly (`node dist/index.js`)
-against a fake Supabase URL in this session and confirmed working
-end-to-end short of the actual database/storage calls — see
-`worker/README.md`.
+`worker/src/render/__tests__/runJob.test.ts` exercises `runJob.ts`'s own
+orchestration logic — the first test to do so — with every dependency
+(`fetchEligibleClips`, `downloadClipToFile`/`uploadMontageFile`,
+`renderMontage`, `getEntitlement`, the push-notification senders,
+`supabaseAdmin`) stubbed via Node's built-in `node:test` `mock.module()`
+(the `test` script passes `--experimental-test-module-mocks` for this).
+It proves the fix for a real bug (see `docs/IMPLEMENTATION_STATUS.md`
+Phase 46): when every eligible clip downloads fine but fails to
+*normalize*, `runJob` must fail the job rather than upload and finalize
+a "successful" montage that's really just a blank title card with
+`clip_count: 0`.
+
+Beyond that one orchestration test, this suite still does **not**
+exercise the real Supabase download/upload/job-claim code paths against
+a live project (`worker/src/render/downloadClip.ts`,
+`fetchEligibleClips.ts`, `poller.ts`'s actual RPC call) — those need a
+real Supabase project. The worker binary itself (health server,
+structured logging, poll loop, SIGTERM shutdown) was run directly
+(`node dist/index.js`) against a fake Supabase URL in this session and
+confirmed working end-to-end short of the actual database/storage
+calls — see `worker/README.md`.
 
 ## Edge Function tests
 

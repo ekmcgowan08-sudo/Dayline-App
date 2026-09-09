@@ -112,6 +112,21 @@ export async function runJob(job: MontageJob): Promise<void> {
       },
     });
 
+    if (result.renderedClipPaths.length === 0) {
+      // Every eligible clip downloaded fine but failed to *normalize*
+      // (corrupt/unreadable video) — a different failure point than the
+      // all-clips-failed-to-download guard above, easy to miss because
+      // renderMontage() itself doesn't treat this as an error: with a
+      // title card and zero usable clips, segmentPaths still has one
+      // entry (the title card), so it happily renders and returns a
+      // "successful" video containing nothing but a blank date card.
+      // That's not a real day worth delivering — fail the job the same
+      // way as the download-failure case instead of finalizing it as
+      // 'ready' with clip_count: 0.
+      await failJob(job, ErrorCode.ClipDownloadFailed, true);
+      return;
+    }
+
     const ownerId = job.kind === 'personal' ? job.user_id! : job.group_id!;
     // Keyed on job.id (this montage row's own primary key, stable across
     // every retry of this job) rather than a fresh random UUID per

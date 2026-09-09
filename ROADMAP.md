@@ -158,8 +158,21 @@ bucket forever, the same unbounded-storage-leak class already closed
 twice this session for other buckets. Closed with a stable per-user
 path (upsert now actually overwrites) plus a cache-busting query
 string on the returned URL, so a changed photo still shows immediately
-rather than a stale cached one. See `docs/IMPLEMENTATION_STATUS.md` for
-the exact, honest verification tier on every piece.
+rather than a stale cached one. Also since fixed, on the render worker
+side: every eligible clip downloading fine but failing to *normalize*
+(corrupt/unreadable video) was a gap the worker never guarded, one step
+past the existing "every clip failed to *download*" guard — the render
+pipeline itself doesn't treat an all-clips-skipped render as an error
+as long as a title card is present, so the worker uploaded that
+title-card-only video as the finished montage and marked it `ready`
+with zero real clips, complete with a "Your Day Is Ready" push for a
+day that has nothing in it. Closed by failing the job in that case
+instead, the same as the download-failure path; also the occasion for
+this worker's first orchestration-level test (`runJob.test.ts`, using
+Node's built-in module-mocking to stub every external dependency),
+where previously only the pure rendering pipeline had test coverage.
+See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
+tier on every piece.
 
 ## Milestone 2 — Production hardening
 
