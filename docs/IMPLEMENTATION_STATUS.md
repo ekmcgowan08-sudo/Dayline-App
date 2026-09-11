@@ -1662,6 +1662,12 @@ the app's UI.
   `joinGroupByCode()`'s error paths.
 - ✅ Mobile `npm run typecheck`, `npm run lint`, `npm test` (11 suites,
   49 tests) all rerun clean after the `groups.ts` change.
+- ✅ **Confirmed on real CI**: run 34655717711 (the 31st consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `database` job's new "Run group membership entitlement
+  limit test suite" step explicitly passed alongside all 17 other
+  existing pgTAP suites in that job, not just inferred from the run's
+  overall summary status.
 
 ---
 
