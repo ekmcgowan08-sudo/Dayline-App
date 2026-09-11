@@ -9,6 +9,15 @@ insert into auth.users (id, email) values
 insert into profiles (id, display_name) values
   ('99999999-9999-9999-9999-999999999904', 'gc-test')
   on conflict (id) do nothing;
+-- This test creates 5 groups for one user purely to exercise the rate
+-- limit quickly; that would collide with the separate, lower
+-- entitlement-based group-count cap (2 free / 10 plus — see
+-- 20260903000000_group_membership_entitlement_limit.sql) if this user
+-- were on the free tier, so give it 'plus' to isolate the rate-limit
+-- behavior this file is actually testing.
+insert into subscriptions (user_id, tier, status, entitlement) values
+  ('99999999-9999-9999-9999-999999999904', 'plus', 'active', 'plus')
+  on conflict (user_id) do update set entitlement = 'plus', status = 'active';
 
 create or replace function test_login(p uuid) returns void
 language sql as $$ select set_config('request.jwt.claim.sub', p::text, false); $$;

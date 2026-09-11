@@ -1599,6 +1599,72 @@ containing nothing but a blank date card.
 
 ---
 
+## Phase 47 — Fix free-tier group count having no server-side enforcement
+
+Found by re-auditing the entitlement/paid-tier code paths specifically:
+`ENTITLEMENT_LIMITS.free.maxActiveGroups = 2` /
+`ENTITLEMENT_LIMITS.plus.maxActiveGroups = 10`
+(`mobile/src/constants/entitlements.ts`) existed only as a client-side UI
+hint. `mobile/src/app/(app)/groups/index.tsx` disables its "Create
+group"/"Join with code" buttons once the client-fetched group list
+reaches the limit, but neither database RPC that actually adds a
+`group_members` row — `create_group()` or `join_group_by_code()` — ever
+checked the caller's total active group count against their entitlement
+tier. This is the exact same missing-server-enforcement bug class
+already fixed once for the memory archive
+(Phase 11 / `20260831180000_entitlement_enforced_archive.sql`) but missed
+here — the core paid-tier differentiator (more groups) was entirely
+opt-in for a free user willing to call the RPC directly instead of using
+the app's UI.
+
+- ✅ Reproduced against a real local Postgres 16 instance (not just
+  reasoned about): applied all migrations, logged in as a fresh user
+  with no `subscriptions` row (`current_entitlement()` = `'free'`), and
+  called `create_group()` 4 times in a row with no error — every call
+  succeeded, proving a free user could create unlimited groups.
+- ✅ `supabase/migrations/20260903000000_group_membership_entitlement_limit.sql`
+  (new): `create_group()` now raises `group_limit_reached` if the
+  caller's current `group_members` row count is already at or above
+  their tier's limit (2 free / 10 plus, computed from
+  `current_entitlement()`) before doing any work. `join_group_by_code()`
+  gets the identical check (returning `{ok: false, error:
+  'group_limit_reached'}` in its existing jsonb-result style) placed
+  after the idempotent "already a member" short-circuit but before the
+  block/capacity checks, so it never blocks a no-op rejoin.
+- ✅ Re-ran the same repro after the fix: a free user's 3rd
+  `create_group()` call now raises `group_limit_reached`; a free
+  "joiner" already in 2 groups is rejected joining a 3rd via invite code
+  with the same error; a `plus` user is unaffected up to 10.
+- ✅ `supabase/tests/group_membership_entitlement_limit.test.sql` (new):
+  proves both RPCs enforce the cap for a free user, that a free user
+  under the limit can still join normally, and that a plus user is not
+  capped at 2. Discrimination-tested by moving the new migration file
+  aside and re-running — failed with the predicted symptom ("expected
+  group_limit_reached, got FAIL: a free user created a 3rd group...")
+  — then restored the migration and re-ran clean.
+- ✅ Fixed a real collision this introduced in two *existing* pgTAP
+  suites that create more than 2 groups for one user purely as fixtures
+  for unrelated scenarios: `group_creation_rate_limit.test.sql` (creates
+  5 groups for one user to exercise the rate limit) now grants that user
+  `plus` up front; `rls_security.test.sql` (alice creates 4 groups across
+  separate membership/capacity/blocking scenarios) now grants alice
+  `plus` for those fixtures and temporarily resets her to `free` only for
+  the S6 scenario that specifically proves a client can't self-upgrade,
+  restoring `plus` immediately afterward.
+- ✅ Full local pgTAP suite (`supabase/tests/run_all.sh`, all 18 files)
+  reruns clean, exit code 0 — every existing suite plus the new one.
+- ✅ Added the new test to `supabase/tests/run_all.sh` and
+  `.github/workflows/ci.yml`'s `database` job so it actually runs on
+  every push, not just locally.
+- ✅ `mobile/src/services/groups.ts`: mapped `group_limit_reached` to a
+  friendly message ("You're at your plan's group limit — upgrade to Plus
+  in Settings to join more.") in both `createGroup()`'s and
+  `joinGroupByCode()`'s error paths.
+- ✅ Mobile `npm run typecheck`, `npm run lint`, `npm test` (11 suites,
+  49 tests) all rerun clean after the `groups.ts` change.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:

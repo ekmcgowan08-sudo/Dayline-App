@@ -21,7 +21,11 @@ export async function createGroup(
   const { data, error } = await supabase.rpc('create_group', { p_name: name, p_timezone: timezone });
   if (error) {
     const message =
-      error.message === 'rate_limited' ? "You've created a few groups already — try again in a bit." : error.message;
+      error.message === 'rate_limited'
+        ? "You've created a few groups already — try again in a bit."
+        : error.message === 'group_limit_reached'
+          ? "You're at your plan's group limit — upgrade to Plus in Settings to join more."
+          : error.message;
     return { ok: false, error: message };
   }
   return { ok: true, group: data as Group };
@@ -45,6 +49,7 @@ const JOIN_ERROR_MESSAGES: Record<string, string> = {
   blocked_relationship: "You can't join this group.",
   group_full: 'This group already has its maximum of 10 members.',
   rate_limited: 'Too many attempts — try again in a few minutes.',
+  group_limit_reached: "You're at your plan's group limit — upgrade to Plus in Settings to join more.",
 };
 
 export async function joinGroupByCode(code: string): Promise<{ ok: true; group: Group } | { ok: false; error: string }> {

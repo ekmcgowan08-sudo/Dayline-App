@@ -171,6 +171,18 @@ instead, the same as the download-failure path; also the occasion for
 this worker's first orchestration-level test (`runJob.test.ts`, using
 Node's built-in module-mocking to stub every external dependency),
 where previously only the pure rendering pipeline had test coverage.
+Also since fixed: the free-tier active-group limit
+(`ENTITLEMENT_LIMITS.free.maxActiveGroups = 2`) existed only as a
+client-side UI hint — neither database RPC that actually adds someone
+to a group (`create_group()`, `join_group_by_code()`) ever checked the
+caller's total group count against their entitlement tier, so a free
+user willing to call the RPC directly (bypassing the app's disabled
+buttons) could create or join unlimited groups, the same
+missing-server-enforcement class already closed once for the memory
+archive. Reproduced against a real local Postgres instance first (a
+fresh free user created 4 groups with no error), then closed by adding
+the same tier-based count check, computed from `current_entitlement()`,
+to both RPCs.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

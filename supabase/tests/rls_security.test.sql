@@ -38,6 +38,14 @@ insert into auth.users (id, email) values
 
 insert into profiles (id, display_name) select id, email from auth.users;
 
+-- Alice creates 4 groups across S2/S4/S6 below purely as fixtures for
+-- unrelated RLS scenarios (membership visibility, capacity, blocking) —
+-- give her 'plus' so the separate entitlement-based group-count cap (2
+-- free / 10 plus — see 20260903000000_group_membership_entitlement_limit.sql)
+-- doesn't collide with what this file is actually testing.
+insert into subscriptions (user_id, tier, status, entitlement) values
+  ('11111111-1111-1111-1111-111111111111', 'plus', 'active', 'plus');
+
 create or replace function test_login(p uuid) returns void
 language sql as $$ select set_config('request.jwt.claim.sub', p::text, false); $$;
 
@@ -194,8 +202,12 @@ end $$;
 -- S6 — a client cannot grant themselves a paid entitlement.
 -- ---------------------------------------------------------------------
 reset role;
-insert into subscriptions (user_id, tier, status, entitlement) values
-  ('11111111-1111-1111-1111-111111111111', 'free', 'active', 'free');
+-- Alice already has a 'plus' subscription row from the S2/S4/S6 group-count
+-- fixture above; reset her back to 'free' (rather than inserting a fresh
+-- row, which would now violate the primary key) so this scenario still
+-- starts from the same "free user tries to self-upgrade" precondition.
+update subscriptions set tier = 'free', entitlement = 'free'
+  where user_id = '11111111-1111-1111-1111-111111111111';
 set role authenticated;
 
 select test_login('11111111-1111-1111-1111-111111111111'); -- alice
@@ -219,6 +231,14 @@ begin
   if not v_rejected then raise exception 'FAIL: S6 client inserted their own paid subscription row'; end if;
   raise notice 'PASS: S6 client cannot self-grant a paid entitlement (insert+update both blocked)';
 end $$;
+
+-- S6 above deliberately proved alice can't self-upgrade while 'free'; put
+-- her back on 'plus' (as postgres, bypassing RLS — not the client path
+-- just proven blocked) so she can keep creating groups as a fixture for
+-- S7+ below without tripping the unrelated group-count cap.
+reset role;
+update subscriptions set tier = 'plus', entitlement = 'plus'
+  where user_id = '11111111-1111-1111-1111-111111111111';
 
 -- ---------------------------------------------------------------------
 -- S7 — a client cannot change moderation status on content.
