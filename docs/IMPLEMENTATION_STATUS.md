@@ -1671,6 +1671,56 @@ the app's UI.
 
 ---
 
+## Phase 48 — Fix no server-side cap on a single clip's rendered length
+
+Found continuing the same audit lens as Phase 47 (what does the client
+enforce that the server never checks?), but applied to `CAPTURE.clipSeconds`
+(5, `mobile/src/constants/brand.ts`) instead of the entitlement limits.
+The app's camera call caps a real capture at `recordAsync({maxDuration:
+CAPTURE.clipSeconds})`, but that's a client-side camera API argument, not
+a security boundary — nothing server-side ever validated an uploaded
+clip's actual duration. `clips.duration_ms` can't be trusted for this
+either: it's client-supplied (`capture.tsx` even hardcodes it to
+`CAPTURE.clipSeconds * 1000` rather than measuring the real recording)
+and the render worker never reads it — `normalizeClip()` in
+`worker/src/render/pipeline.ts` re-encodes using the source file's own
+real, ffprobe-measured duration, unbounded, with no trim step anywhere
+in the pipeline. A client that bypassed the app's recording flow (a
+modified client, a direct upload to the `clips` bucket, a future bug)
+could upload an arbitrarily long video and have the *entire* thing
+rendered into everyone's montage — breaking the "five seconds at a
+time" product promise for a whole group at once and inflating
+render/storage/egress cost per `docs/COSTS.md`. The existing
+`MAX_REASONABLE_CLIP_BYTES` (25MB) sanity check in
+`mobile/src/services/clips.ts` doesn't close this either: it's
+client-side only (bypassed the same way), and a heavily compressed,
+low-resolution multi-minute video can still fit under 25MB.
+
+- ✅ `worker/src/render/pipeline.ts`: added `MAX_CLIP_SECONDS = 8` (a
+  generously padded ceiling over the 5-second spec, to tolerate any
+  legitimate recording overshoot) and clamped `normalizeClip()`'s
+  `duration` to `Math.min(probe.durationSeconds, MAX_CLIP_SECONDS)`,
+  passing `-t <duration>` to ffmpeg so the *output* is actually trimmed
+  to that length regardless of the source file's real length — not just
+  a validation check that rejects the upload, since a slight overshoot
+  is likely benign and rejecting it entirely would be worse UX than
+  quietly capping it.
+- ✅ `worker/src/test-fixtures/generate.ts`: added a real 12-second
+  synthetic fixture (`over-long.mp4`, via `ffmpeg testsrc`) — well past
+  any legitimate capture — for proving the cap against real ffmpeg
+  output, not just the returned number.
+- ✅ `worker/src/render/__tests__/pipeline.test.ts` (new test): asserts
+  both `normalizeClip()`'s returned duration and the *actual*
+  ffprobe-measured output duration are within `MAX_CLIP_SECONDS` (+0.5s
+  tolerance) for the 12-second fixture. Discrimination-tested: reverted
+  just the clamp/`-t` lines (fixture and test kept), reran — failed with
+  the predicted symptom (`expected returned duration <= 8s, got 12`) —
+  then restored the fix and reran clean.
+- ✅ Full local worker suite (`npm run typecheck`, `npm run build`, `npm
+  test`, real ffmpeg) reruns clean: 16 tests (up from 15), 0 failures.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:

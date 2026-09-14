@@ -4,11 +4,15 @@ import { runFfmpeg } from '../render/ffmpegExec.js';
 
 /** Generates small synthetic fixture clips (no binaries committed to the
  * repo) for tests: a landscape clip with audio, a portrait silent clip,
- * and a deliberately corrupt "clip" (empty file). */
+ * a deliberately corrupt "clip" (empty file), and one deliberately
+ * longer than pipeline.ts's MAX_CLIP_SECONDS cap (for proving a
+ * bypassed 5-second recording limit gets trimmed, not rendered in
+ * full). */
 export async function generateFixtures(dir: string) {
   const landscapeWithAudio = path.join(dir, 'landscape-with-audio.mp4');
   const portraitSilent = path.join(dir, 'portrait-silent.mp4');
   const corrupt = path.join(dir, 'corrupt.mp4');
+  const overLong = path.join(dir, 'over-long.mp4');
 
   await runFfmpeg([
     '-f',
@@ -40,5 +44,16 @@ export async function generateFixtures(dir: string) {
 
   await writeFile(corrupt, Buffer.from('not a real video file'));
 
-  return { landscapeWithAudio, portraitSilent, corrupt };
+  await runFfmpeg([
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc=size=640x480:rate=30:duration=12',
+    '-c:v',
+    'libx264',
+    '-an',
+    overLong,
+  ]);
+
+  return { landscapeWithAudio, portraitSilent, corrupt, overLong };
 }

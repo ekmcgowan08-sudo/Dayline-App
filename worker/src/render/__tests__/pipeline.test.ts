@@ -5,7 +5,16 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { generateFixtures } from '../../test-fixtures/generate.js';
 import { probeVideo } from '../ffmpegExec.js';
-import { ClipRenderError, normalizeClip, renderMontage, renderTextCard, renderTitleCard, OUTPUT_HEIGHT, OUTPUT_WIDTH } from '../pipeline.js';
+import {
+  ClipRenderError,
+  normalizeClip,
+  renderMontage,
+  renderTextCard,
+  renderTitleCard,
+  MAX_CLIP_SECONDS,
+  OUTPUT_HEIGHT,
+  OUTPUT_WIDTH,
+} from '../pipeline.js';
 
 let workDir: string;
 let fixtures: Awaited<ReturnType<typeof generateFixtures>>;
@@ -35,6 +44,26 @@ test('normalizeClip synthesizes silent audio for a clip that has none', async ()
   assert.equal(probe.width, OUTPUT_WIDTH);
   assert.equal(probe.height, OUTPUT_HEIGHT);
   assert.ok(probe.hasAudio, 'expected a synthesized silent audio stream');
+});
+
+test('normalizeClip trims a clip longer than MAX_CLIP_SECONDS instead of rendering it in full', async () => {
+  const out = path.join(workDir, 'norm-overlong.mp4');
+  const returnedDuration = await normalizeClip(fixtures.overLong, out);
+  const probe = await probeVideo(out);
+  // The fixture is a real 12-second clip (well past any legitimate 5-
+  // second capture plus overshoot); this proves a client that bypassed
+  // the app's own recording limit can't get more than the cap rendered
+  // into everyone's montage.
+  assert.ok(
+    returnedDuration <= MAX_CLIP_SECONDS,
+    `expected returned duration <= ${MAX_CLIP_SECONDS}s, got ${returnedDuration}`
+  );
+  assert.ok(
+    probe.durationSeconds <= MAX_CLIP_SECONDS + 0.5,
+    `expected rendered output <= ~${MAX_CLIP_SECONDS}s, got ${probe.durationSeconds}`
+  );
+  assert.equal(probe.width, OUTPUT_WIDTH);
+  assert.equal(probe.height, OUTPUT_HEIGHT);
 });
 
 test('normalizeClip rejects a corrupt/unreadable file with ClipRenderError', async () => {

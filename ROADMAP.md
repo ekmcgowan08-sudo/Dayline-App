@@ -182,7 +182,15 @@ missing-server-enforcement class already closed once for the memory
 archive. Reproduced against a real local Postgres instance first (a
 fresh free user created 4 groups with no error), then closed by adding
 the same tier-based count check, computed from `current_entitlement()`,
-to both RPCs.
+to both RPCs. Also since fixed, applying the same "what does the client
+enforce that the server never checks?" lens to `CAPTURE.clipSeconds`
+instead of the entitlement limits: the app's camera call caps a real
+capture at 5 seconds, but that's a client-side argument, not a security
+boundary — nothing server-side ever validated an uploaded clip's actual
+duration, so a client that bypassed the app's recording flow could
+upload an arbitrarily long video and have the entire thing rendered
+into everyone's montage. Closed by trimming (not rejecting) any clip
+past a generously padded 8-second ceiling during normalization.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

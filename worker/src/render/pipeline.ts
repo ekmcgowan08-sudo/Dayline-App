@@ -9,6 +9,26 @@ export const OUTPUT_HEIGHT = 1920; // portrait-first 9:16, per the product spec
 export const OUTPUT_FPS = 30;
 const FADE_SECONDS = 0.3;
 
+/**
+ * A hard ceiling on how much of any single source clip ends up in a
+ * rendered montage. Mirrors `CAPTURE.clipSeconds` (5) in
+ * `mobile/src/constants/brand.ts`, generously padded — the app's own
+ * camera call already caps a real capture at `maxDuration:
+ * CAPTURE.clipSeconds`, but that's a client-side camera API argument,
+ * not a security boundary: nothing server-side ever validated the
+ * uploaded file's actual duration before this. Without this, a client
+ * that bypassed the app's recording flow (a modified client, a direct
+ * upload to the `clips` bucket, a future bug) could upload an
+ * arbitrarily long video and have the *entire* thing rendered into
+ * everyone's montage — breaking the "five seconds at a time" product
+ * promise for a whole group and inflating render/storage/egress cost
+ * per `docs/COSTS.md`. `clips.duration_ms` itself can't be trusted for
+ * this either — it's client-supplied and never cross-checked against
+ * the uploaded file, so this clamps against the file's real,
+ * ffprobe-measured duration instead.
+ */
+export const MAX_CLIP_SECONDS = 8;
+
 export class ClipRenderError extends Error {
   constructor(
     message: string,
@@ -39,7 +59,7 @@ export async function normalizeClip(inputPath: string, outputPath: string): Prom
     throw new ClipRenderError('clip has no usable video stream', inputPath);
   }
 
-  const duration = probe.durationSeconds;
+  const duration = Math.min(probe.durationSeconds, MAX_CLIP_SECONDS);
   const fadeOutStart = Math.max(0, duration - FADE_SECONDS);
 
   const vf = [
@@ -83,6 +103,8 @@ export async function normalizeClip(inputPath: string, outputPath: string): Prom
     '-ac',
     '2',
     '-shortest',
+    '-t',
+    String(duration),
     outputPath
   );
 

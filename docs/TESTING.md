@@ -236,6 +236,12 @@ committed to the repo. It proves, by actually invoking ffmpeg and
 `ffprobe`-inspecting the output:
 - Portrait 1080×1920/30fps normalization from a landscape+audio source.
 - Silent-audio synthesis for a clip that has none.
+- A clip longer than `MAX_CLIP_SECONDS` (8) is actually trimmed, not
+  rendered in full — both the returned duration and the real
+  ffprobe-measured output duration are checked against a genuine
+  12-second synthetic fixture (see `docs/IMPLEMENTATION_STATUS.md`
+  Phase 48: nothing server-side previously capped a single clip's
+  rendered length, only the client-side camera API argument did).
 - A typed `ClipRenderError` for a corrupt/unreadable file.
 - Title-card rendering with the correct duration.
 - Multi-line text-card rendering (used for the contributor-credits card).
