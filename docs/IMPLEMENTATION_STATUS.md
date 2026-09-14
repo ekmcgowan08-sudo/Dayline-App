@@ -1787,6 +1787,11 @@ for that account.
   every push, not just locally.
 - ✅ Mobile `npm test` (11 suites, 49 tests) reruns clean — unaffected,
   no mobile code changed for this fix.
+- ✅ **Confirmed on real CI**: run 34811755961 (the 34th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `database` job's new "Run schedule prefs bounds test suite"
+  step explicitly passed alongside all 18 other existing pgTAP suites in
+  that job, not just inferred from the run's overall summary status.
 
 ---
 
