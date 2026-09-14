@@ -1718,6 +1718,12 @@ low-resolution multi-minute video can still fit under 25MB.
   then restored the fix and reran clean.
 - ✅ Full local worker suite (`npm run typecheck`, `npm run build`, `npm
   test`, real ffmpeg) reruns clean: 16 tests (up from 15), 0 failures.
+- ✅ **Confirmed on real CI**: run 34811268591 (the 33rd consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `worker` job's `npm test` step explicitly passed (real
+  ffmpeg on the GitHub Actions runner, including the new
+  normalizeClip-trim test), not just inferred from the run's overall
+  summary status.
 
 ---
 
