@@ -190,7 +190,15 @@ boundary — nothing server-side ever validated an uploaded clip's actual
 duration, so a client that bypassed the app's recording flow could
 upload an arbitrarily long video and have the entire thing rendered
 into everyone's montage. Closed by trimming (not rejecting) any clip
-past a generously padded 8-second ceiling during normalization.
+past a generously padded 8-second ceiling during normalization. Also
+since fixed, the same lens applied to `notification_preferences`: its
+`reminders_per_day`, `wake_hour`/`sleep_hour`, and `custom_times` were
+bounded only by the client's own Stepper widgets, with no server-side
+check — an out-of-range value sent via a direct API call could have
+generated tens of thousands of `capture_slots` rows and a burst of
+pushes per day for that account, or crashed the Today screen outright
+on a malformed hour. Closed with `CHECK` constraints mirroring the
+client's existing bounds exactly.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

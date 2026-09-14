@@ -123,6 +123,8 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/moderator_rpc_service_role_grants.test.sql postgres
       - name: Run acceptance records idempotency test suite
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/acceptance_records_idempotent.test.sql postgres
+      - name: Run schedule prefs bounds test suite
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/schedule_prefs_bounds.test.sql postgres
 
   dependency-audit:
     name: Dependency audit (high/critical fails the build)

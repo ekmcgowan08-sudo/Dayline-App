@@ -1727,6 +1727,69 @@ low-resolution multi-minute video can still fit under 25MB.
 
 ---
 
+## Phase 49 — Fix no server-side bounds on schedule-preference values
+
+Found continuing the same "what does the client enforce that the server
+never checks?" lens (Phases 47/48), applied this time to
+`notification_preferences` numeric/array columns instead of entitlement
+limits or clip duration. `saveSchedulePrefs()`
+(`mobile/src/services/schedulePrefs.ts`) writes `wake_hour`, `sleep_hour`,
+`reminders_per_day`, and `custom_times` straight through to the table
+with zero server-side validation — the only bounds anywhere were the
+client's own UI widgets (a `Stepper` capped at `reminders_per_day` 1-24,
+`wake_hour` 0-23, `sleep_hour` 1-23; `custom_times` has no cap in the UI
+at all). Unlike Phase 16's original free-text `maxLength` gaps, this one
+has a real, recurring cost/reliability consequence, not just a
+theoretical one: `computeSlotTimesForDate()`
+(`mobile/src/services/schedule.ts`) generates one `capture_slots` row —
+and one local plus one server-backed push — per `reminders_per_day` /
+per `custom_times` entry, every single day, with no cap in that function
+either. A `reminders_per_day` sent as 100000 via a direct API call (any
+Postman-style caller or a modified client) would have
+`syncTodaysCaptureSlots()` upsert ~100000 rows a day for that account,
+and since slots would land only fractions of a second apart at that
+density, `send-capture-reminders` would burst hundreds of pushes to that
+user's own device on every cron cycle. An out-of-range `wake_hour`/
+`sleep_hour` (e.g. 99999) is worse in a different way: the malformed
+"HH" segment in `computeSlotTimesForDate()`'s template string produces
+an `Invalid Date`, and `syncTodaysCaptureSlots()` calling `.toISOString()`
+on it throws a `RangeError` — a self-inflicted crash of the Today screen
+for that account.
+
+- ✅ Reproduced against a real local Postgres instance first: inserted a
+  `notification_preferences` row with `wake_hour: 99999`,
+  `reminders_per_day: 100000`, and a 500-entry `custom_times` array — all
+  three succeeded with no rejection before this fix.
+- ✅ `supabase/migrations/20260903010000_schedule_prefs_bounds.sql`
+  (new): added `CHECK` constraints mirroring the client's own existing
+  bounds exactly — `wake_hour` 0-23, `sleep_hour` 1-23,
+  `reminders_per_day` 1-24, `quiet_start`/`quiet_end` (unused UI
+  scaffolding today) nullable 0-23, and `custom_times` capped at 24
+  entries (matching the `reminders_per_day` cap, since both represent
+  "how many reminders in a day").
+- ✅ Re-ran the same repro after the fix: each out-of-range value now
+  rejected individually with `check_violation` (verified wake_hour,
+  reminders_per_day, and the combined repro separately, not just one
+  masking the others), while legitimate max-of-range values (0/23/24/24
+  entries) still insert cleanly.
+- ✅ `supabase/tests/schedule_prefs_bounds.test.sql` (new): 5 assertions
+  — wake_hour, sleep_hour, reminders_per_day, and custom_times each
+  rejected out of range, plus a legitimate max-of-range row accepted.
+  Discrimination-tested: moved the new migration file aside and reran —
+  failed with the predicted symptom ("FAIL: an out-of-range wake_hour
+  should have been rejected") — then restored and reran clean.
+- ✅ Full local pgTAP suite (`supabase/tests/run_all.sh`, all 19 files)
+  reruns clean, exit code 0 — every existing suite plus the new one, no
+  fixture collisions this time (no existing test writes an out-of-range
+  schedule-preference value).
+- ✅ Added the new test to `supabase/tests/run_all.sh` and
+  `.github/workflows/ci.yml`'s `database` job so it actually runs on
+  every push, not just locally.
+- ✅ Mobile `npm test` (11 suites, 49 tests) reruns clean — unaffected,
+  no mobile code changed for this fix.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:

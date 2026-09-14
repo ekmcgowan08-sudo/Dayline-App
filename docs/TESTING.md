@@ -144,6 +144,12 @@ All three are also wired into `.github/workflows/ci.yml`.
   onboarding flow re-sends the same acceptance rows on next launch) a
   no-op that preserves the original `accepted_at`, while a genuinely new
   document version still records its own row.
+- `schedule_prefs_bounds.test.sql` — proves the `CHECK` constraints on
+  `notification_preferences` (`wake_hour`, `sleep_hour`,
+  `reminders_per_day`, `custom_times` length — see
+  `docs/IMPLEMENTATION_STATUS.md` Phase 49) actually reject values a
+  direct API call could otherwise send past the client's Stepper/UI
+  caps, while legitimate max-of-range values still insert cleanly.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 
