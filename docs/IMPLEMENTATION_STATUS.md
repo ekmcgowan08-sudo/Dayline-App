@@ -1943,6 +1943,11 @@ path that only implemented half of it.
   the real implementation and reran clean.
 - ✅ Full mobile suite (`npm run typecheck`, `npm run lint`, `npm test`)
   reruns clean: 12 suites (up from 11), 52 tests (up from 49).
+- ✅ **Confirmed on real CI**: run 34896678678 (the 36th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `Mobile (typecheck, lint, test)` job's `npm test` step
+  explicitly passed with the new `notifications.test.ts` suite included,
+  not just inferred from the run's overall summary status.
 
 ---
 
