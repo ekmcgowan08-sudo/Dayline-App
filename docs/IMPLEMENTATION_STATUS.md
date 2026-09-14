@@ -1795,6 +1795,96 @@ for that account.
 
 ---
 
+## Phase 50 — Fix account deletion silently destroying/orphaning groups
+
+Found by re-auditing `delete-account`'s cascade behavior specifically —
+a different angle from Phases 47-49's "client vs. server enforcement"
+lens, this time asking "does account deletion respect the invariants
+group management already enforces?" It doesn't, in two independent
+ways, both traced to `groups.created_by uuid not null references
+auth.users(id) on delete cascade` in the very first schema migration.
+
+**Bug 1 (severe, silent data loss):** `created_by` is pure historical
+attribution — every authorization check on a group (`owner or admin
+update group`, `set_group_member_role`, `transfer_group_ownership`,
+`delete_group`) already checks `group_members.role`, never
+`created_by`. But its `ON DELETE CASCADE` means deleting the account
+that happened to run `create_group()` deletes the *entire group* —
+`group_members`, `montages`, `group_contributions`,
+`group_membership_events` all cascade from `groups.id` in turn. This
+fires even when the founder legitimately transferred ownership away via
+`transfer_group_ownership()` and then left the group entirely via
+`leave_group()` — at that point they're not a member, not the owner,
+have zero relationship to the group's current state, and deleting their
+own account still destroys it for the actual current owner and every
+other member, with no warning to anyone.
+
+**Bug 2 (orphaned group, no data loss but no path to recover):**
+`delete-account` calls `admin.auth.admin.deleteUser(userId)` directly,
+which cascades `group_members` via the same `on delete cascade`
+mechanism — bypassing `leave_group()`'s own
+`owner_must_transfer_or_delete` safeguard entirely (that check only
+exists inside the `leave_group()` RPC, which account deletion never
+calls). If the deleted account was a group's sole owner with other
+members still present, the group survives (once Bug 1 is fixed) but is
+left with zero `owner`/`admin` rows — `set_group_member_role()`,
+`transfer_group_ownership()`, and `delete_group()` all require an
+existing owner, so nobody can ever manage or delete the group again,
+and if the last remaining plain member eventually leaves via
+`leave_group()`, that function's last-member-leaving auto-delete only
+fires for `role = 'owner'`, so the empty `groups` row would be left
+permanently orphaned with no cleanup path.
+
+- ✅ Reproduced both against a real local Postgres instance before
+  writing any fix. Bug 1: created a group, transferred ownership away,
+  had the founder leave entirely, deleted the founder's account — the
+  group and the real current owner's membership both vanished. Bug 2:
+  a group with an owner and two plain members, deleted the owner's
+  account — the group survived but was left with zero owner/admin
+  rows.
+- ✅ `supabase/migrations/20260903020000_groups_created_by_set_null.sql`
+  (new, Bug 1): dropped `groups_created_by_fkey`'s `ON DELETE CASCADE`
+  and re-added it as `ON DELETE SET NULL` (making `created_by` nullable
+  first). Confirmed `created_by` is never read anywhere in the mobile
+  client and never used for authorization — safe to lose without
+  affecting any real behavior.
+- ✅ `supabase/migrations/20260903030000_group_members_owner_reassignment.sql`
+  (new, Bug 2): an `AFTER DELETE ON group_members` trigger that fires
+  only when a deleted row had `role = 'owner'`, other members still
+  remain, and no owner/admin remains — auto-promotes the longest-
+  tenured admin (or if none, the longest-tenured plain member) to
+  owner. Every legitimate app-level path already prevents this exact
+  condition (`leave_group()`'s `owner_must_transfer_or_delete`,
+  `remove_group_member()`'s `cannot_remove_owner`), so the trigger only
+  ever fires in the one gap account deletion opens; confirmed harmless
+  no-op for the `leave_group()` last-member-leaving case (no other
+  members exist there, so the promotion query finds nobody).
+- ✅ Re-ran both repros after the fixes: Bug 1's group and current owner
+  now survive; Bug 2's earliest-joined remaining member is auto-
+  promoted to owner and immediately verified able to exercise real
+  owner powers (`set_group_member_role()` on the other member).
+- ✅ `supabase/tests/group_owner_account_deletion.test.sql` (new): both
+  scenarios as end-to-end assertions, including the auto-promoted
+  owner successfully calling `set_group_member_role()`. Discrimination-
+  tested: moved both new migrations aside — Scenario A failed with the
+  predicted symptom ("group was destroyed by the departed founder's
+  account deletion"); restored only the first migration — Scenario B
+  then failed with its own predicted symptom ("expected exactly 1
+  owner after reassignment, got 0"); restored the second migration —
+  both scenarios pass.
+- ✅ Full local pgTAP suite (`supabase/tests/run_all.sh`, all 20 files)
+  reruns clean, exit code 0 — no fixture collisions with any existing
+  suite.
+- ✅ Added the new test to `supabase/tests/run_all.sh` and
+  `.github/workflows/ci.yml`'s `database` job.
+- ✅ `mobile/src/types/database.ts`: widened `Group.created_by` to
+  `UUID | null` to match the now-nullable column — it's never read in
+  the mobile client, so this is a type-accuracy fix only.
+- ✅ Mobile `npm run typecheck`, `npm run lint`, `npm test` (11 suites,
+  49 tests) all rerun clean.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:

@@ -125,6 +125,8 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/acceptance_records_idempotent.test.sql postgres
       - name: Run schedule prefs bounds test suite
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/schedule_prefs_bounds.test.sql postgres
+      - name: Run group owner account deletion test suite
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/group_owner_account_deletion.test.sql postgres
 
   dependency-audit:
     name: Dependency audit (high/critical fails the build)

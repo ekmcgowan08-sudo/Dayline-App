@@ -198,7 +198,19 @@ check — an out-of-range value sent via a direct API call could have
 generated tens of thousands of `capture_slots` rows and a burst of
 pushes per day for that account, or crashed the Today screen outright
 on a malformed hour. Closed with `CHECK` constraints mirroring the
-client's existing bounds exactly.
+client's existing bounds exactly. Also since fixed, from a different
+angle (does account deletion respect the invariants group management
+already enforces?): `groups.created_by`'s `ON DELETE CASCADE` meant
+deleting the account that happened to create a group destroyed the
+*entire group* — even for a founder who had legitimately transferred
+ownership away and left the group entirely, with zero warning to the
+group's actual current members. Separately, deleting a group's sole
+current owner bypassed `leave_group()`'s own safeguard against exactly
+that, leaving the group's other members with no owner/admin and no
+path to ever get one back. Closed by making `created_by` purely
+historical (`ON DELETE SET NULL` — it was never used for authorization
+anyway) and adding a trigger that auto-promotes the longest-tenured
+remaining member to owner in the one gap account deletion opens.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

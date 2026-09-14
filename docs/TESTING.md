@@ -150,6 +150,14 @@ All three are also wired into `.github/workflows/ci.yml`.
   `docs/IMPLEMENTATION_STATUS.md` Phase 49) actually reject values a
   direct API call could otherwise send past the client's Stepper/UI
   caps, while legitimate max-of-range values still insert cleanly.
+- `group_owner_account_deletion.test.sql` — proves account deletion no
+  longer destroys or orphans a group (see
+  `docs/IMPLEMENTATION_STATUS.md` Phase 50): a departed founder's
+  account deletion (after transferring ownership away and leaving
+  entirely) doesn't destroy the group or the real current owner's
+  membership, and a sole owner's account deletion auto-promotes the
+  earliest-joined remaining member to owner — who is then verified to
+  actually exercise owner powers, not just hold the role label.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 

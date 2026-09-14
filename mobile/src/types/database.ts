@@ -112,7 +112,7 @@ export interface MontageClip {
 export interface Group {
   id: UUID;
   name: string;
-  created_by: UUID;
+  created_by: UUID | null;
   invite_code: string;
   invite_code_status: InviteCodeStatus;
   invite_code_expires_at: ISODateTime | null;
