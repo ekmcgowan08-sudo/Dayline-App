@@ -210,7 +210,16 @@ that, leaving the group's other members with no owner/admin and no
 path to ever get one back. Closed by making `created_by` purely
 historical (`ON DELETE SET NULL` — it was never used for authorization
 anyway) and adding a trigger that auto-promotes the longest-tenured
-remaining member to owner in the one gap account deletion opens.
+remaining member to owner in the one gap account deletion opens. Also
+since fixed, closing the loop on the "Your Day Is Ready" push (Phase
+21): the tap handler only ever listened for a notification response
+received while the app was already running — the response that
+actually *launches* the app from fully killed is never delivered to
+that listener at all, so tapping the push in the single most common
+real-world case silently opened Today instead of the finished montage.
+Closed by adding the missing cold-start half, the same two-path split
+(cold start vs. already running) the password-reset deep link already
+used.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

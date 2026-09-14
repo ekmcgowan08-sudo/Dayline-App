@@ -138,12 +138,37 @@ export async function syncTodaysCaptureSlots(
  * so the caller can clean it up on unmount. Other notification types
  * (capture reminders) deliberately have no tap handler yet — there's
  * nowhere more specific than "the app" for one to deep-link to.
+ *
+ * This only covers the app-already-running case — see
+ * handleColdStartNotification() for the other half.
  */
 export function registerNotificationTapHandler(): Notifications.Subscription {
   return Notifications.addNotificationResponseReceivedListener((response) => {
     const montageId = getMontageIdFromNotificationData(response.notification.request.content.data);
     if (montageId) router.push(`/(app)/montage/${montageId}`);
   });
+}
+
+/**
+ * Handles the tap that actually launched the app from fully killed (not
+ * just backgrounded) — the response that caused that launch is never
+ * delivered to addNotificationResponseReceivedListener above, which only
+ * fires for a response received while it's already subscribed. Without
+ * this, tapping a "Your Day Is Ready" push when the app wasn't running
+ * silently opened the app to Today instead of the finished montage —
+ * exactly the dead end registerNotificationTapHandler's own docstring
+ * says this feature exists to avoid. Same cold-start-vs-already-running
+ * split as the password-reset deep link (see
+ * lib/passwordResetLink.ts / Linking.getInitialURL()), just for
+ * expo-notifications' own equivalent API instead of a raw URL. Call
+ * once at app startup, alongside registerNotificationTapHandler().
+ */
+export async function handleColdStartNotification(): Promise<void> {
+  const response = await Notifications.getLastNotificationResponseAsync();
+  if (!response) return;
+  await Notifications.clearLastNotificationResponseAsync().catch(() => {});
+  const montageId = getMontageIdFromNotificationData(response.notification.request.content.data);
+  if (montageId) router.push(`/(app)/montage/${montageId}`);
 }
 
 export async function cancelAllCaptureReminders(): Promise<void> {

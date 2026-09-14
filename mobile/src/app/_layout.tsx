@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { CrashFallback } from '../components/CrashFallback';
 import { CrashReportingErrorBoundary, initCrashReporting, setCrashReportingUser } from '../lib/crashReporting';
-import { registerNotificationTapHandler } from '../services/notifications';
+import { handleColdStartNotification, registerNotificationTapHandler } from '../services/notifications';
 import { useAuthStore } from '../state/auth-store';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -30,6 +30,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     const subscription = registerNotificationTapHandler();
+    handleColdStartNotification();
     return () => subscription.remove();
   }, []);
 

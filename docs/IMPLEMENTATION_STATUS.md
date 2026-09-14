@@ -1891,6 +1891,61 @@ permanently orphaned with no cleanup path.
 
 ---
 
+## Phase 51 — Fix "Your Day Is Ready" push doing nothing when the app was killed
+
+Found from a fresh angle — not server enforcement or cascade behavior
+this time, but a classic native-push pitfall: does the deep-link path
+this session already built (Phase 21/22) actually work from every app
+lifecycle state, not just "already running"?
+
+`registerNotificationTapHandler()` (`mobile/src/services/notifications.ts`)
+only ever called `Notifications.addNotificationResponseReceivedListener()`.
+That listener fires for a notification response received *while it's
+already subscribed* — i.e., the app was foregrounded or backgrounded,
+not fully killed. `expo-notifications`' own documented behavior is that
+the response which actually *launches* the app from killed is never
+delivered to that listener at all; retrieving it requires a separate,
+one-time call to `Notifications.getLastNotificationResponseAsync()` at
+startup. Without it, tapping a "Your Day Is Ready" push when the app
+wasn't running silently opened the app to Today instead of the
+finished montage — exactly the dead end this feature's own docstring
+says it exists to avoid ("instead of just opening the app to whatever
+screen it happens to land on"). This codebase already has the correct
+precedent for exactly this cold-start-vs-already-running split — the
+password-reset deep link (Phase 44) handles both
+`Linking.getInitialURL()` (cold start) and the `url` event listener
+(already running) — the notification tap handler was the one deep-link
+path that only implemented half of it.
+
+- ✅ `mobile/src/services/notifications.ts`: added
+  `handleColdStartNotification()` — calls
+  `Notifications.getLastNotificationResponseAsync()` once, routes
+  through the same already-tested `getMontageIdFromNotificationData()`
+  pure function `registerNotificationTapHandler()` uses (so both paths
+  agree on what counts as a montage-ready notification), and calls
+  `Notifications.clearLastNotificationResponseAsync()` afterward so a
+  later JS reload within the same native process lifetime (Fast Refresh
+  in dev; a root-layout remount) doesn't re-navigate to a stale montage.
+- ✅ `mobile/src/app/_layout.tsx`: calls `handleColdStartNotification()`
+  once at startup, alongside the existing `registerNotificationTapHandler()`
+  registration.
+- ✅ `mobile/src/services/__tests__/notifications.test.ts` (new): 3
+  tests — a cold-start "day is ready" response deep-links to the right
+  montage and clears the response; no notification response (normal
+  launch) never navigates; an unrelated notification type (a capture
+  reminder) never navigates. Mocks `expo-notifications`, `expo-router`,
+  and `../../lib/supabase` (the last one throws at import time without
+  env vars — same reason `notificationRouting.ts` was pulled out as its
+  own dependency-free module, see `docs/TESTING.md`). Discrimination-
+  tested: temporarily stubbed `handleColdStartNotification()` to a
+  no-op — the cold-start test failed with the predicted symptom ("Number
+  of calls: 0"), the other two still passed correctly — then restored
+  the real implementation and reran clean.
+- ✅ Full mobile suite (`npm run typecheck`, `npm run lint`, `npm test`)
+  reruns clean: 12 suites (up from 11), 52 tests (up from 49).
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:

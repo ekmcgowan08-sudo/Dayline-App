@@ -204,6 +204,14 @@ remaining untested step, not the SQL itself.
   previous one instead of leaking a new object per change — see
   `docs/IMPLEMENTATION_STATUS.md` Phase 45) while still returning a
   different, cache-busted public URL on every call.
+  `mobile/src/services/__tests__/notifications.test.ts` — 3 tests for
+  `handleColdStartNotification()`, the cold-start half of the "Your Day
+  Is Ready" push deep link (see `docs/IMPLEMENTATION_STATUS.md`
+  Phase 51): a launch-from-killed tap on a montage-ready push deep-links
+  to the right montage and clears the response; a normal launch (no
+  notification response) never navigates; an unrelated notification type
+  never navigates either. Mocks `expo-notifications`, `expo-router`, and
+  `../../lib/supabase`.
 - **Component tests**: `mobile/src/components/ui/__tests__/Button.test.tsx`
   — press handling, disabled/loading states, accessibility state,
   rendered output, using `@testing-library/react-native` v14 (note: its
