@@ -1882,6 +1882,12 @@ permanently orphaned with no cleanup path.
   the mobile client, so this is a type-accuracy fix only.
 - ✅ Mobile `npm run typecheck`, `npm run lint`, `npm test` (11 suites,
   49 tests) all rerun clean.
+- ✅ **Confirmed on real CI**: run 34855505267 (the 35th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `database` job's new "Run group owner account deletion test
+  suite" step explicitly passed alongside all 19 other existing pgTAP
+  suites in that job, not just inferred from the run's overall summary
+  status.
 
 ---
 
