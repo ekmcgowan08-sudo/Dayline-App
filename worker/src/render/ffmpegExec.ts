@@ -18,15 +18,32 @@ export class FfmpegError extends Error {
  * shell (execFile, not exec) — args are passed as an array, so clip file
  * paths (which include user-controlled-ish content like a UUID we
  * generate ourselves, but defense in depth costs nothing) can never be
- * interpreted as shell syntax. */
-export async function runFfmpeg(args: string[]): Promise<void> {
+ * interpreted as shell syntax.
+ *
+ * Always runs under a timeout (see config.ffmpegTimeoutMs) — execFile has
+ * no default one, so without this a hung process would block the
+ * worker's single-job poll loop forever. `timeoutMs` is only ever
+ * overridden by tests; production call sites use the configured default.
+ *
+ * killSignal is deliberately SIGKILL, not execFile's own SIGTERM default:
+ * proved empirically (see ffmpegExec.test.ts, a real ffmpeg blocked on a
+ * named pipe with no writer) that ffmpeg does NOT die on SIGTERM while
+ * stuck opening an input that never produces data — it installs its own
+ * SIGTERM handler meant for a graceful stop mid-encode, which a process
+ * still blocked in that low-level open()/read() never reaches. SIGTERM
+ * alone would have left this "fix" just as capable of hanging forever as
+ * having no timeout at all. */
+export async function runFfmpeg(args: string[], options: { timeoutMs?: number } = {}): Promise<void> {
   try {
     await execFileAsync(config.ffmpegPath, ['-y', '-hide_banner', '-loglevel', 'error', ...args], {
       maxBuffer: 1024 * 1024 * 32,
+      timeout: options.timeoutMs ?? config.ffmpegTimeoutMs,
+      killSignal: 'SIGKILL',
     });
   } catch (e) {
-    const err = e as { stderr?: string; message: string };
-    throw new FfmpegError(`ffmpeg failed: ${err.message}`, err.stderr ?? '');
+    const err = e as { stderr?: string; message: string; killed?: boolean; signal?: string | null };
+    const timedOut = Boolean(err.killed && err.signal === 'SIGKILL');
+    throw new FfmpegError(`ffmpeg failed${timedOut ? ' (timed out)' : ''}: ${err.message}`, err.stderr ?? '');
   }
 }
 
@@ -38,16 +55,12 @@ export type ProbeResult = {
   rotation: number;
 };
 
-export async function probeVideo(filePath: string): Promise<ProbeResult> {
-  const { stdout } = await execFileAsync(config.ffprobePath, [
-    '-v',
-    'error',
-    '-print_format',
-    'json',
-    '-show_format',
-    '-show_streams',
-    filePath,
-  ]);
+export async function probeVideo(filePath: string, options: { timeoutMs?: number } = {}): Promise<ProbeResult> {
+  const { stdout } = await execFileAsync(
+    config.ffprobePath,
+    ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', filePath],
+    { maxBuffer: 1024 * 1024, timeout: options.timeoutMs ?? config.ffmpegTimeoutMs, killSignal: 'SIGKILL' }
+  );
   const data = JSON.parse(stdout) as {
     format?: { duration?: string };
     streams: Array<{

@@ -277,6 +277,19 @@ committed to the repo. It proves, by actually invoking ffmpeg and
   omitted when every clip fails to render (title-card-only output).
 - Both the "abort the whole job" and "no usable segments" failure paths.
 
+`worker/src/render/__tests__/ffmpegExec.test.ts` proves a real, deterministic
+hang — `ffmpeg -i` pointed at a `mkfifo` named pipe with no writer, which
+blocks in a genuine `open()` syscall exactly like a corrupt/pathological
+real input could — resolves (rejects with a timeout `FfmpegError`) within
+its configured `timeoutMs` instead of hanging forever (see
+`docs/IMPLEMENTATION_STATUS.md` Phase 53: `node:child_process.execFile`
+has no default timeout, so without this a single hung process blocked
+the worker's single-job poll loop forever). Also the reason the fix uses
+`killSignal: 'SIGKILL'` rather than `execFile`'s own `SIGTERM` default —
+proved empirically first that a real ffmpeg process stuck in this state
+does not die on `SIGTERM` (it installs its own handler for a graceful
+stop mid-encode that a process still blocked in `open()` never reaches).
+
 `worker/src/render/__tests__/runJob.test.ts` exercises `runJob.ts`'s own
 orchestration logic — the first test to do so — with every dependency
 (`fetchEligibleClips`, `downloadClipToFile`/`uploadMontageFile`,

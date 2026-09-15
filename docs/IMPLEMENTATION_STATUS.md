@@ -2014,6 +2014,69 @@ either — no `addPushTokenListener()` anywhere.
 
 ---
 
+## Phase 53 — Fix a hung ffmpeg/ffprobe process blocking the worker forever
+
+Found continuing the lifecycle-gap lens (Phases 51/52), applied this
+time to the render worker's own process management rather than the
+mobile client. `worker/src/poller.ts` is a deliberate single-job-at-a-
+time loop (`await runJob(typedJob)` blocks the next poll iteration
+until it resolves). Every ffmpeg/ffprobe invocation went through
+`node:child_process`'s `execFile`, promisified — which has **no
+default timeout**. A genuinely hung process (corrupt/pathological
+input, a stuck read on unusual storage) would block that single
+`await` forever, silently halting montage rendering for every user
+until an operator noticed and manually restarted the container — a
+total, silent single point of failure reachable by nothing more exotic
+than one bad video file.
+
+- ✅ Reproduced a real hang, not a hypothetical one: created a named
+  pipe (`mkfifo`) with no writer and pointed `ffmpeg -i` at it — a
+  blocking `open()` on a FIFO with no writer is genuine, deterministic
+  Unix behavior, not a mock. Confirmed via raw `execFile` (outside this
+  codebase entirely) that it hangs indefinitely with no timeout option.
+- ✅ First fix attempt — adding `timeout: config.ffmpegTimeoutMs` with
+  `execFile`'s default `killSignal` (`SIGTERM`) — was itself proven
+  insufficient by the same repro: manually sent `SIGTERM` to a real
+  ffmpeg process stuck in this exact state and it **did not die**
+  (still alive, confirmed via `ps`). ffmpeg installs its own `SIGTERM`
+  handler intended for a graceful stop mid-encode; a process still
+  blocked in the low-level `open()`/`read()` before that handling
+  applies never reaches it. `SIGKILL` on the same stuck process, tested
+  immediately after, killed it in under a second. Without this
+  discovery, the "fix" would have been just as capable of hanging
+  forever as having no timeout at all — worth recording as a real
+  discrimination-testing catch, not just a formality.
+- ✅ `worker/src/config.ts`: added `ffmpegTimeoutMs` (env
+  `FFMPEG_TIMEOUT_MS`, default 180000 — generous for any single call in
+  this pipeline, since each segment is at most an 8-second clip at a
+  fast preset, while staying well under `staleClaimSeconds` so the same
+  worker instance can fail the job and resume polling itself rather
+  than needing a second replica or a manual restart).
+- ✅ `worker/src/render/ffmpegExec.ts`: both `runFfmpeg()` and
+  `probeVideo()` now pass `timeout: config.ffmpegTimeoutMs` and,
+  critically, `killSignal: 'SIGKILL'` (not the default `SIGTERM`) to
+  `execFile`. Both gained an optional `timeoutMs` override parameter
+  used only by tests; every production call site is unchanged and uses
+  the configured default. A timeout now surfaces through the exact same
+  `FfmpegError`/`ClipRenderError` handling every other ffmpeg failure
+  already goes through (a corrupt clip gets skipped per-clip; a
+  title-card/concat-stage failure fails the whole job, retryable) — no
+  new error-handling paths needed.
+- ✅ `worker/src/render/__tests__/ffmpegExec.test.ts` (new): the same
+  named-pipe repro as a real automated test — `runFfmpeg()` against a
+  writer-less FIFO with `timeoutMs: 300` resolves (rejects with a
+  `FfmpegError` whose message includes "timed out") in ~315ms, not
+  never. Discrimination-tested at the killSignal level specifically
+  (not just fixed-vs-unfixed): reverted only `killSignal: 'SIGKILL'`
+  back to the implicit `SIGTERM` default — the test hung and had to be
+  killed by an external `timeout` wrapper, exactly reproducing the raw
+  manual repro — then restored `SIGKILL` and reran clean.
+- ✅ Full local worker suite (`npm run typecheck`, `npm run build`, `npm
+  test`, real ffmpeg) reruns clean: 17 tests (up from 16), 0 failures,
+  ~14s total.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:

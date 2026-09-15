@@ -231,7 +231,17 @@ on every app start for a user who has already completed onboarding
 (gated so a brand-new user still gets the permission prompt at its
 intentional point in onboarding, not immediately at launch), plus a
 live token-rotation listener Expo's own docs recommend and this app
-never had.
+never had. Also since fixed, same lens turned on the render worker's
+own process management: every ffmpeg/ffprobe call ran through
+node:child_process's execFile with no timeout, and the worker's poll
+loop is deliberately single-job-at-a-time — so one genuinely hung
+process (proved real with a named pipe that blocks a real ffmpeg in a
+real open() syscall, not a hypothetical) would have silently halted
+montage rendering for every user until someone manually restarted the
+container. Closed with a timeout — and, after proving a first attempt
+using execFile's default SIGTERM insufficient (a real stuck ffmpeg
+survives SIGTERM; only SIGKILL reliably kills it in that state), the
+actual fix that hard-kills it and lets the job fail and retry normally.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

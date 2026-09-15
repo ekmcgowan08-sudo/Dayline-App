@@ -15,6 +15,17 @@ export const config = {
   tmpDir: process.env.WORKER_TMP_DIR ?? '/tmp/dayline-worker',
   ffmpegPath: process.env.FFMPEG_PATH ?? 'ffmpeg',
   ffprobePath: process.env.FFPROBE_PATH ?? 'ffprobe',
+  /** Kills a single ffmpeg/ffprobe invocation if it runs longer than this
+   * — see docs/IMPLEMENTATION_STATUS.md Phase 53. Without it, a hung
+   * process (corrupt/pathological input, a stuck read on unusual
+   * storage) blocks this worker's single-job-at-a-time poll loop
+   * forever, since node:child_process.execFile has no default timeout.
+   * 3 minutes is generous for any one call in this pipeline (each
+   * segment is at most an 8-second clip at a fast preset) while staying
+   * well under staleClaimSeconds, so the same worker instance can fail
+   * the job and resume polling itself rather than needing a second
+   * replica or a manual restart to notice. */
+  ffmpegTimeoutMs: Number(process.env.FFMPEG_TIMEOUT_MS ?? 180_000),
   titleCardFontPath: process.env.TITLE_CARD_FONT_PATH ?? '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
   /** Optional — Expo's enhanced push security token, same as the
    * EXPO_ACCESS_TOKEN send-capture-reminders' Edge Function optionally
