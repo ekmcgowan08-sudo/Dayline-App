@@ -210,8 +210,11 @@ remaining untested step, not the SQL itself.
   Phase 51): a launch-from-killed tap on a montage-ready push deep-links
   to the right montage and clears the response; a normal launch (no
   notification response) never navigates; an unrelated notification type
-  never navigates either. Mocks `expo-notifications`, `expo-router`, and
-  `../../lib/supabase`.
+  never navigates either. The same file's `registerPushTokenRefreshListener`
+  suite (1 test, added for Phase 52) proves a rotated push token
+  captured via `Notifications.addPushTokenListener()` gets forwarded to
+  `register_push_token()`. Mocks `expo-notifications`, `expo-router`,
+  and `../../lib/supabase`.
 - **Component tests**: `mobile/src/components/ui/__tests__/Button.test.tsx`
   — press handling, disabled/loading states, accessibility state,
   rendered output, using `@testing-library/react-native` v14 (note: its

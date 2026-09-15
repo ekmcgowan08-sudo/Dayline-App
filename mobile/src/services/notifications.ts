@@ -65,15 +65,34 @@ export async function registerPushToken(userId: string): Promise<{ error: string
     const { data: expoPushToken } = await Notifications.getExpoPushTokenAsync(
       projectId ? { projectId } : undefined
     );
-
-    const { error } = await supabase.rpc('register_push_token', {
-      p_expo_push_token: expoPushToken,
-      p_platform: Platform.OS === 'ios' ? 'ios' : 'android',
-    });
-    return { error: error?.message ?? null };
+    return sendPushTokenToServer(expoPushToken);
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'push registration failed' };
   }
+}
+
+async function sendPushTokenToServer(expoPushToken: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc('register_push_token', {
+    p_expo_push_token: expoPushToken,
+    p_platform: Platform.OS === 'ios' ? 'ios' : 'android',
+  });
+  return { error: error?.message ?? null };
+}
+
+/**
+ * Catches an Expo push token that changes *while this device is already
+ * registered* — not just at reinstall (registerPushToken() above only
+ * ever ran once, during onboarding; see
+ * docs/IMPLEMENTATION_STATUS.md Phase 52 for why that alone wasn't
+ * enough). Expo's own docs call this out explicitly: a device's push
+ * token can rotate during the lifetime of an install, not only across
+ * one. Call once at app startup for a signed-in user; returns the
+ * subscription so the caller can clean it up on unmount.
+ */
+export function registerPushTokenRefreshListener(): Notifications.Subscription {
+  return Notifications.addPushTokenListener((tokenData) => {
+    sendPushTokenToServer(tokenData.data);
+  });
 }
 
 /**

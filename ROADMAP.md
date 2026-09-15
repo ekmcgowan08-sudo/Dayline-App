@@ -219,7 +219,19 @@ that listener at all, so tapping the push in the single most common
 real-world case silently opened Today instead of the finished montage.
 Closed by adding the missing cold-start half, the same two-path split
 (cold start vs. already running) the password-reset deep link already
-used.
+used. Also since fixed, same lens applied to push *registration*
+instead of tap handling: registerPushToken() was called from exactly
+one place in the whole app — onboarding — which is gated on a
+permanent, once-per-account flag and never runs again on any device.
+Any existing user who upgraded phones, reinstalled, or cleared app
+data silently stopped receiving server-backed push forever, with no
+error and no other path in the app to fix it — likely to eventually
+affect every long-term user, not an edge case. Closed by re-registering
+on every app start for a user who has already completed onboarding
+(gated so a brand-new user still gets the permission prompt at its
+intentional point in onboarding, not immediately at launch), plus a
+live token-rotation listener Expo's own docs recommend and this app
+never had.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

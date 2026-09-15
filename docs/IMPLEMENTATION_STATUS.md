@@ -1951,6 +1951,63 @@ path that only implemented half of it.
 
 ---
 
+## Phase 52 — Fix push tokens never (re-)registering after onboarding
+
+Found continuing Phase 51's lens — does a native platform API behave
+the way client code assumes in every app lifecycle state, not just the
+common one? — applied this time to push *registration* itself rather
+than push *tap handling*. `registerPushToken()`
+(`mobile/src/services/notifications.ts`) is imported and called from
+exactly one place in the entire app: `(onboarding)/schedule.tsx`, fired
+once during onboarding. Onboarding is gated on
+`profile.onboarding_completed_at` — a permanent, server-side flag set
+once per *account*, not per device or per install (confirmed in
+`app/index.tsx` and `app/(app)/_layout.tsx`) — so it never runs again
+for that account, on any device, ever. Consequence: any existing user
+who upgrades phones, reinstalls the app, or clears app data never has
+their new install's push token registered at all — `device_push_tokens`
+still points at a dead token (or nothing, for a brand-new device),
+silently, forever, with no error surfaced anywhere and no other UI path
+(checked `settings/notifications.tsx`: it only toggles preference
+booleans, never touches registration or permissions) to fix it. This
+would eventually affect essentially every long-term user, not an edge
+case. Separately, Expo's own documentation calls out that a device's
+push token can rotate *during* the lifetime of an install too (not only
+across reinstalls), which nothing in this codebase ever listened for
+either — no `addPushTokenListener()` anywhere.
+
+- ✅ `mobile/src/services/notifications.ts`: extracted the "send this
+  token to `register_push_token()`" step out of `registerPushToken()`
+  into a shared `sendPushTokenToServer()` helper, then added
+  `registerPushTokenRefreshListener()` — wraps
+  `Notifications.addPushTokenListener()` to catch a live token rotation
+  and re-send it through the same helper.
+- ✅ `mobile/src/app/_layout.tsx`: added a `useEffect` that calls
+  `registerPushToken(userId)` and registers the refresh listener for
+  any signed-in user who has *already completed onboarding* (gated on
+  the store's `profileLoaded` + `profile.onboarding_completed_at`, to
+  avoid a race against the async profile fetch on cold start). This
+  covers reinstall/new-device/cleared-data for a returning user on
+  every subsequent app launch — `register_push_token()` is a cheap,
+  idempotent upsert-by-reassignment, so calling it repeatedly is safe.
+  Deliberately gated on onboarding being *done* rather than firing for
+  every signed-in user: a brand-new user still gets the notification
+  permission prompt at its intentional, contextual point in the
+  onboarding flow (explaining the daily reminder concept first) instead
+  of immediately at launch before they understand why the app wants it.
+- ✅ `mobile/src/services/__tests__/notifications.test.ts`: added a
+  test proving `registerPushTokenRefreshListener()` forwards a rotated
+  token to `register_push_token()` via the captured
+  `addPushTokenListener()` callback. Discrimination-tested: stubbed the
+  function to return a no-op subscription without registering any
+  callback — the test failed with the predicted symptom ("Received:
+  undefined" for the callback capture) — then restored and reran
+  clean.
+- ✅ Full mobile suite (`npm run typecheck`, `npm run lint`, `npm test`)
+  reruns clean: 12 suites, 53 tests (up from 52).
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:
