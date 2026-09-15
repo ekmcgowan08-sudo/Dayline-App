@@ -2005,6 +2005,12 @@ either — no `addPushTokenListener()` anywhere.
   clean.
 - ✅ Full mobile suite (`npm run typecheck`, `npm run lint`, `npm test`)
   reruns clean: 12 suites, 53 tests (up from 52).
+- ✅ **Confirmed on real CI**: run 34924402212 (the 37th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `Mobile (typecheck, lint, test)` job's `npm test` step
+  explicitly passed with the new `registerPushTokenRefreshListener`
+  test included, not just inferred from the run's overall summary
+  status.
 
 ---
 
