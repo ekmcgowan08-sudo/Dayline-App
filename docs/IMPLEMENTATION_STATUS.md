@@ -2128,6 +2128,12 @@ in this call path had ever set a timeout.
   test`, real ffmpeg) reruns clean: 18 tests (up from 17), 0 failures,
   ~28s total. `runJob.test.ts` (which stubs `supabaseAdmin` entirely via
   `mock.module()`) is unaffected, confirming the change is additive.
+- ✅ **Confirmed on real CI**: run 35056778749 (the 39th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `worker` job's `npm test` step explicitly passed (real
+  ffmpeg on the GitHub Actions runner, including the new
+  never-responding-TCP-server test, completing in ~14s with no flake),
+  not just inferred from the run's overall summary status.
 
 ---
 
