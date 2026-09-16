@@ -6,8 +6,9 @@
  * this worker's single-job-at-a-time poll loop forever — the exact same
  * failure shape as the hung-ffmpeg-process bug fixed in
  * docs/IMPLEMENTATION_STATUS.md Phase 53, just for every PostgREST/
- * Storage call instead of every ffmpeg invocation. See supabaseAdmin.ts,
- * the only place this is actually wired in.
+ * Storage call instead of every ffmpeg invocation. Wired in by
+ * supabaseAdmin.ts (every PostgREST/Storage call, Phase 54) and
+ * pushNotifications.ts (the direct call to Expo's push API, Phase 55).
  */
 export function createTimeoutFetch(timeoutMs: number): typeof fetch {
   return (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {

@@ -249,7 +249,13 @@ supabase-js sets one by default — so a hung network call would block
 the same single-job poll loop exactly as forever as the ffmpeg case
 did. Proved with a real TCP server that accepts a connection and never
 responds, then closed with a wrapped `fetch` that hard-times-out every
-call this client makes.
+call this client makes. Also since fixed, the third and final call
+site with the same shape: the worker's direct call to Expo's push API
+(`pushNotifications.ts`) bypassed `supabaseAdmin` entirely and so
+missed that same fix, and its "non-fatal" try/catch only guards
+against an actual rejection, not a promise that never settles — closed
+by wiring it through the same timeout-wrapped `fetch` used everywhere
+else in the worker.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

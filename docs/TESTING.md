@@ -298,6 +298,18 @@ never writes a response — a real hang, not a mock — makes
 instead of hanging forever, closing the same "no default timeout"
 gap `supabaseAdmin`'s PostgREST/Storage calls had.
 
+`worker/src/__tests__/pushNotifications.timeout.test.ts` proves the
+same fix wired into the worker's third and final hang-prone network
+call site (see `docs/IMPLEMENTATION_STATUS.md` Phase 55): the raw
+`fetch` to Expo's push API inside `pushNotifications.ts`. Rather than
+re-testing `createTimeoutFetch` itself (already covered above), this
+mocks `supabaseAdmin.js` so the token/preference lookups resolve
+instantly, points `config.expoPushUrl` at the same kind of
+never-responding TCP server, and asserts that the exported
+`sendMontageReadyPush`/`sendGroupMontageReadyPush` — the functions
+`runJob.ts` actually awaits — resolve in ~300ms instead of hanging,
+proving the wiring rather than just the underlying mechanism.
+
 `worker/src/render/__tests__/runJob.test.ts` exercises `runJob.ts`'s own
 orchestration logic — the first test to do so — with every dependency
 (`fetchEligibleClips`, `downloadClipToFile`/`uploadMontageFile`,

@@ -1,8 +1,9 @@
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { supabaseAdmin } from './supabaseAdmin.js';
+import { createTimeoutFetch } from './timeoutFetch.js';
 
-const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const timeoutFetch = createTimeoutFetch(config.expoPushTimeoutMs);
 
 type ExpoPushTicket = { status: 'ok' | 'error'; message?: string; details?: { error?: string } };
 export type ExpoPushMessage = { to: string; title: string; body: string; data: Record<string, unknown> };
@@ -38,7 +39,14 @@ export function buildGroupMontageReadyMessages(expoPushTokens: string[], montage
  * only the message content and the recipient-selection logic differ. */
 async function deliverExpoMessages(messages: ExpoPushMessage[]): Promise<void> {
   if (messages.length === 0) return;
-  const response = await fetch(EXPO_PUSH_URL, {
+  // Plain global fetch has no default timeout — see
+  // docs/IMPLEMENTATION_STATUS.md Phase 55. Without timeoutFetch, a
+  // hung call to Expo's push API would block this worker's single-job
+  // poll loop forever, the same as the ffmpeg/Supabase hangs fixed in
+  // Phases 53/54. The surrounding try/catch in the exported functions
+  // below only catches an actual rejection — it does nothing for a
+  // promise that never settles at all.
+  const response = await timeoutFetch(config.expoPushUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

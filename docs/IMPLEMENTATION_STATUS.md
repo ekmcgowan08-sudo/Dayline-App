@@ -2135,6 +2135,57 @@ in this call path had ever set a timeout.
   never-responding-TCP-server test, completing in ~14s with no flake),
   not just inferred from the run's overall summary status.
 
+## Phase 55 — Fix a hung Expo push API call blocking the worker forever
+
+Same lens as Phases 53-54, applied by deliberately checking every other
+fetch/execFile call site in the worker after fixing the first two.
+`worker/src/pushNotifications.ts`'s `deliverExpoMessages()` — the
+function behind both `sendMontageReadyPush` and
+`sendGroupMontageReadyPush`, both awaited directly inside
+`runJob.ts`'s job execution path — called the raw global `fetch`
+against `EXPO_PUSH_URL` directly, bypassing `supabaseAdmin` (and
+Phase 54's fix) entirely. The surrounding try/catch in both exported
+functions ("non-fatal by design", same as the "mark clips used" step)
+only catches an actual rejection; it does nothing for a promise that
+never settles at all, so a hung Expo push API call would block the
+worker's single-job poll loop forever, identical in shape to the
+ffmpeg and Supabase cases already fixed.
+
+- ✅ Reproduced with the same technique as Phase 54: a real `node:net`
+  TCP server that accepts the connection but never responds. To point
+  `pushNotifications.ts` at it without touching its production
+  behavior, made `EXPO_PUSH_URL` overridable the same way
+  `ffmpegPath`/`ffprobePath` already are — added `config.expoPushUrl`
+  (env `EXPO_PUSH_URL`, default the real Expo endpoint) and removed the
+  old hardcoded module constant.
+- ✅ `worker/src/config.ts`: added `expoPushTimeoutMs` (env
+  `EXPO_PUSH_TIMEOUT_MS`, default 30000) and `expoPushUrl`.
+- ✅ `worker/src/pushNotifications.ts`: wraps the Expo call in
+  `createTimeoutFetch(config.expoPushTimeoutMs)` (the same helper
+  Phase 54 introduced), same as `supabaseAdmin.ts` already does.
+- ✅ `worker/src/timeoutFetch.ts`: corrected its doc comment, which
+  claimed `supabaseAdmin.ts` was "the only place this is actually wired
+  in" — no longer true.
+- ✅ `worker/src/__tests__/pushNotifications.timeout.test.ts` (new):
+  mocks `supabaseAdmin.js` (via `mock.module()`, same pattern
+  `runJob.test.ts` already uses) so `filterOptedIn`/`getExpoPushTokens`/
+  the group-member and group-name lookups resolve instantly, and mocks
+  `config.js` to point `expoPushUrl` at a real never-responding TCP
+  server with a 300ms `expoPushTimeoutMs`. Proves the *wiring*, not
+  just the already-proven `createTimeoutFetch` mechanism: both
+  `sendMontageReadyPush` and `sendGroupMontageReadyPush` resolve in
+  ~300ms instead of hanging, logging the expected "non-fatal" warning.
+  Discrimination-tested: temporarily reverted the `deliverExpoMessages`
+  call back to plain `fetch` — the test process had to be killed by an
+  external `timeout` wrapper after 15s with no test output at all,
+  confirming the exact predicted hang — then restored and reran clean.
+- ✅ Full local worker suite (`npm run typecheck`, `npm run build`, `npm
+  test`, real ffmpeg) reruns clean: 20 tests (up from 18), 0 failures.
+  `pushNotifications.test.ts`'s existing 4 pure-function tests are
+  unaffected, confirming the change is additive.
+- ⏳ CI verification pending (to be recorded here once confirmed
+  job-by-job on a real run).
+
 ---
 
 ## Environment constraints discovered this session

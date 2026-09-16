@@ -35,6 +35,17 @@ export const config = {
    * seconds is generous for a slow clip/montage upload or download on a
    * poor connection while staying well under staleClaimSeconds. */
   supabaseRequestTimeoutMs: Number(process.env.SUPABASE_REQUEST_TIMEOUT_MS ?? 60_000),
+  /** Same reasoning as supabaseRequestTimeoutMs, for the worker's direct
+   * call to Expo's push API (pushNotifications.ts) — a third call site
+   * with the exact same "no default timeout, blocks the single-job poll
+   * loop forever" shape as Phases 53/54, found by checking every other
+   * fetch/execFile call the worker makes after fixing the first two. */
+  expoPushTimeoutMs: Number(process.env.EXPO_PUSH_TIMEOUT_MS ?? 30_000),
+  /** Overridable the same way ffmpegPath/ffprobePath are — the production
+   * default is Expo's real push endpoint, but pushNotifications.test.ts
+   * needs to point this at a local server to prove expoPushTimeoutMs
+   * actually gets enforced, without depending on a live network hang. */
+  expoPushUrl: process.env.EXPO_PUSH_URL ?? 'https://exp.host/--/api/v2/push/send',
   titleCardFontPath: process.env.TITLE_CARD_FONT_PATH ?? '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
   /** Optional — Expo's enhanced push security token, same as the
    * EXPO_ACCESS_TOKEN send-capture-reminders' Edge Function optionally
