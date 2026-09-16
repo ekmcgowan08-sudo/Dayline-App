@@ -2074,6 +2074,12 @@ than one bad video file.
 - ✅ Full local worker suite (`npm run typecheck`, `npm run build`, `npm
   test`, real ffmpeg) reruns clean: 17 tests (up from 16), 0 failures,
   ~14s total.
+- ✅ **Confirmed on real CI**: run 34925400985 (the 38th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `worker` job's `npm test` step explicitly passed (real
+  ffmpeg on the GitHub Actions runner, including the new named-pipe
+  timeout test, completing in ~14s with no flake), not just inferred
+  from the run's overall summary status.
 
 ---
 
