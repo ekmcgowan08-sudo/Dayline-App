@@ -290,6 +290,14 @@ proved empirically first that a real ffmpeg process stuck in this state
 does not die on `SIGTERM` (it installs its own handler for a graceful
 stop mid-encode that a process still blocked in `open()` never reaches).
 
+`worker/src/__tests__/timeoutFetch.test.ts` proves the same class of
+fix for the worker's network side (see `docs/IMPLEMENTATION_STATUS.md`
+Phase 54): a plain `node:net` TCP server that accepts a connection but
+never writes a response — a real hang, not a mock — makes
+`createTimeoutFetch(300)` reject with a `TimeoutError` in ~311ms
+instead of hanging forever, closing the same "no default timeout"
+gap `supabaseAdmin`'s PostgREST/Storage calls had.
+
 `worker/src/render/__tests__/runJob.test.ts` exercises `runJob.ts`'s own
 orchestration logic — the first test to do so — with every dependency
 (`fetchEligibleClips`, `downloadClipToFile`/`uploadMontageFile`,

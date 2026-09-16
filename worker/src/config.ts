@@ -26,6 +26,15 @@ export const config = {
    * the job and resume polling itself rather than needing a second
    * replica or a manual restart to notice. */
   ffmpegTimeoutMs: Number(process.env.FFMPEG_TIMEOUT_MS ?? 180_000),
+  /** Same reasoning as ffmpegTimeoutMs, applied to every PostgREST/
+   * Storage network call instead of every ffmpeg invocation — see
+   * docs/IMPLEMENTATION_STATUS.md Phase 54. Neither Node's own `fetch`
+   * nor supabase-js sets a default timeout, so a hung network call
+   * (stalled connection, wedged proxy) would otherwise block this
+   * worker's single-job poll loop forever, same as the ffmpeg case. 60
+   * seconds is generous for a slow clip/montage upload or download on a
+   * poor connection while staying well under staleClaimSeconds. */
+  supabaseRequestTimeoutMs: Number(process.env.SUPABASE_REQUEST_TIMEOUT_MS ?? 60_000),
   titleCardFontPath: process.env.TITLE_CARD_FONT_PATH ?? '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
   /** Optional — Expo's enhanced push security token, same as the
    * EXPO_ACCESS_TOKEN send-capture-reminders' Edge Function optionally

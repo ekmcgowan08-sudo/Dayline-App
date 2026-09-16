@@ -242,6 +242,14 @@ container. Closed with a timeout — and, after proving a first attempt
 using execFile's default SIGTERM insufficient (a real stuck ffmpeg
 survives SIGTERM; only SIGKILL reliably kills it in that state), the
 actual fix that hard-kills it and lets the job fail and retry normally.
+Also since fixed, the other half of the same worker-resilience gap:
+`supabaseAdmin` (every PostgREST query, every clip download/montage
+upload) had no timeout either — neither Node's `fetch` nor
+supabase-js sets one by default — so a hung network call would block
+the same single-job poll loop exactly as forever as the ffmpeg case
+did. Proved with a real TCP server that accepts a connection and never
+responds, then closed with a wrapped `fetch` that hard-times-out every
+call this client makes.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

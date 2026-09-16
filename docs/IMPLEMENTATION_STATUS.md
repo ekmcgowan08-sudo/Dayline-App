@@ -2083,6 +2083,54 @@ than one bad video file.
 
 ---
 
+## Phase 54 — Fix a hung Supabase network call blocking the worker forever
+
+Found immediately after Phase 53, applying the exact same lens to the
+other half of the worker's blocking I/O: every ffmpeg/ffprobe call was
+fixed, but `supabaseAdmin` (`worker/src/supabaseAdmin.ts`) — used for
+every PostgREST query, every clip download, every montage upload —
+was created with no custom `fetch`, and neither Node's own `fetch` nor
+`@supabase/supabase-js` sets a default timeout. The worker's poll loop
+(`worker/src/poller.ts`) is the same deliberate single-job-at-a-time
+`await runJob(job)` Phase 53 already described — a hung network call
+(a stalled connection, a wedged proxy, a partial Supabase outage that
+accepts the TCP connection but never responds) would block it exactly
+as forever as the ffmpeg case did, for the identical reason: nothing
+in this call path had ever set a timeout.
+
+- ✅ Reproduced a real hang, not a hypothetical one: a plain
+  `node:net` TCP server that accepts the connection and reads the
+  request but never writes a response — genuine network I/O blocking,
+  not a mock — confirmed hanging Node's own global `fetch` indefinitely
+  with no timeout option.
+- ✅ `worker/src/timeoutFetch.ts` (new): `createTimeoutFetch(timeoutMs)`
+  wraps `fetch` with `AbortSignal.timeout(timeoutMs)`, combined via
+  `AbortSignal.any()` with any signal the caller already passed (never
+  the case today in this codebase, but correct regardless).
+- ✅ `worker/src/config.ts`: added `supabaseRequestTimeoutMs` (env
+  `SUPABASE_REQUEST_TIMEOUT_MS`, default 60000 — generous for a slow
+  clip/montage upload or download on a poor connection, while staying
+  well under `staleClaimSeconds` for the same self-recovery reasoning
+  as `ffmpegTimeoutMs`).
+- ✅ `worker/src/supabaseAdmin.ts`: passes `global: { fetch:
+  createTimeoutFetch(config.supabaseRequestTimeoutMs) }` to
+  `createClient()` — applies to every PostgREST and Storage call this
+  client makes, not just some of them.
+- ✅ `worker/src/__tests__/timeoutFetch.test.ts` (new): the same
+  never-responding-TCP-server repro as a real automated test —
+  `createTimeoutFetch(300)` against it rejects with a `TimeoutError` in
+  ~311ms, not never. Discrimination-tested: temporarily reverted
+  `createTimeoutFetch()` to a plain passthrough with no signal — the
+  test hung and had to be killed by an external `timeout` wrapper,
+  exactly reproducing the raw manual repro — then restored and reran
+  clean.
+- ✅ Full local worker suite (`npm run typecheck`, `npm run build`, `npm
+  test`, real ffmpeg) reruns clean: 18 tests (up from 17), 0 failures,
+  ~28s total. `runJob.test.ts` (which stubs `supabaseAdmin` entirely via
+  `mock.module()`) is unaffected, confirming the change is additive.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:
