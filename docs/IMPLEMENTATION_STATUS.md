@@ -2183,8 +2183,12 @@ ffmpeg and Supabase cases already fixed.
   test`, real ffmpeg) reruns clean: 20 tests (up from 18), 0 failures.
   `pushNotifications.test.ts`'s existing 4 pure-function tests are
   unaffected, confirming the change is additive.
-- ⏳ CI verification pending (to be recorded here once confirmed
-  job-by-job on a real run).
+- ✅ **Confirmed on real CI**: run 35132652803 (the 40th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `worker` job's `npm test` step explicitly passed (real
+  ffmpeg on the GitHub Actions runner, including the new
+  `pushNotifications.timeout.test.ts`, completing in ~12s with no
+  flake), not just inferred from the run's overall summary status.
 
 ---
 
