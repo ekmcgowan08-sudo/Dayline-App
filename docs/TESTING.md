@@ -121,6 +121,22 @@ All three are also wired into `.github/workflows/ci.yml`.
   injected delay between its read and its insert to make the race
   deterministic, asserts exactly one of two concurrent callers passes
   at `max_events=1`, then restores the real function unchanged.
+- `group_limit_race.test.sh` — same shape and same reason as
+  `rate_limit_race.test.sh`, for the same TOCTOU bug class found again in
+  `create_group()` and `join_group_by_code()`
+  (`20260903040000_group_limit_race_fix.sql`): each read the caller's
+  current group count and compared it to their entitlement limit, then
+  inserted a new membership row, with no lock between. Proven against a
+  real Postgres 16 instance: a free-tier user at 1 of their 2 allowed
+  groups who fires two concurrent `join_group_by_code()` calls — or one
+  `create_group()` and one `join_group_by_code()` concurrently — ends up
+  in 3 groups, not capped at 2. The test instruments both functions'
+  *actual deployed definitions* with a delay injected right after each
+  acquires its fix's advisory lock (so a genuinely fixed function still
+  has to serialize correctly, not just skip the race window), fires both
+  the same-function and cross-function races, asserts exactly one caller
+  succeeds in each and the user ends up in exactly 2 groups, then
+  restores the real functions unchanged.
 - `orphaned_montage_storage_purge.test.sql` — proves the `BEFORE DELETE`
   trigger on `montages` (`20260902010000_orphaned_montage_storage_purge.sql`)
   queues a deleted row's `storage_path` into `pending_storage_purges`,

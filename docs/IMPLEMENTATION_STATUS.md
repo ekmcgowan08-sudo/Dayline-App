@@ -2190,6 +2190,58 @@ ffmpeg and Supabase cases already fixed.
   `pushNotifications.timeout.test.ts`, completing in ~12s with no
   flake), not just inferred from the run's overall summary status.
 
+## Phase 56 — Fix a TOCTOU race on the per-user group count limit
+
+Found by pressure-testing Phase 47's own fix (the free/plus group-count
+entitlement limit added in `20260903000000_group_membership_entitlement_
+limit.sql`) for the exact concurrency bug class already fixed once in
+`check_rate_limit()` (Phase 38): `create_group()` and `join_group_by_code()`
+each read `select count(*) from group_members where user_id = auth.uid()`,
+compare it to the tier limit, and only *then* insert a new membership
+row — two separate statements with no lock between them.
+
+- ✅ Proven against a real Postgres 16 instance, not just reasoned about:
+  with a `pg_sleep` injected between each function's count-check and its
+  insert (the same technique `rate_limit_race.test.sh` already uses), a
+  free-tier user sitting at 1 of their 2 allowed groups who fires two
+  concurrent `join_group_by_code()` calls for two different invite codes
+  ends up a member of **3 groups**, not capped at 2 — and the same result
+  firing one `create_group()` and one `join_group_by_code()` concurrently
+  (the cross-function case). Also discovered along the way:
+  `check_rate_limit()`'s own advisory lock (keyed on `('create-group',
+  user_id)`, Phase 38) happens to incidentally serialize two concurrent
+  `create_group()` calls against *each other*, since `create_group()`
+  calls it early and the lock is transaction-scoped — but that's a side
+  effect of a lock meant for a different purpose, not a real guard: it
+  does nothing for `join_group_by_code()` (which never calls
+  `check_rate_limit()`) or for the cross-function case, both proven above
+  to still race.
+- ✅ `supabase/migrations/20260903040000_group_limit_race_fix.sql`: both
+  functions now take a `pg_advisory_xact_lock` keyed on the calling user's
+  id, in a shared `'group_limit:'` namespace, before reading the count —
+  whichever function gets there first blocks the other until its own
+  transaction commits, so the second always sees an up-to-date count.
+- ✅ `supabase/tests/group_limit_race.test.sh` (new, same shape as
+  `rate_limit_race.test.sh`): pulls both functions' actual deployed
+  definitions, asserts the lock is present (regression guard), injects a
+  delay right after each acquires its lock (so a genuinely fixed function
+  still has to prove it serializes correctly, not just that the race
+  window disappeared), then fires both the same-function race (two
+  `join_group_by_code()` calls) and the cross-function race (`create_group()`
+  + `join_group_by_code()`) concurrently. Asserts exactly one caller
+  succeeds in each case and the user ends up in exactly 2 groups.
+  Discrimination-tested: pointed at the pre-fix functions (reverted via
+  `20260903000000_group_membership_entitlement_limit.sql`), it fails
+  immediately with "no longer takes the group_limit advisory lock" before
+  even attempting the race; restored and reran clean, twice (once against
+  a database already exercised by other manual reproduction, once against
+  a freshly migrated one to match real CI usage).
+- ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/ci.yml`'s
+  `database` job, right after the existing rate-limit race test.
+- ✅ Full local `run_all.sh` suite (all 22 test files) reruns clean.
+- ⏳ CI verification pending (to be recorded here once confirmed
+  job-by-job on a real run).
+
 ---
 
 ## Environment constraints discovered this session

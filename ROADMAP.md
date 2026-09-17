@@ -255,7 +255,16 @@ site with the same shape: the worker's direct call to Expo's push API
 missed that same fix, and its "non-fatal" try/catch only guards
 against an actual rejection, not a promise that never settles — closed
 by wiring it through the same timeout-wrapped `fetch` used everywhere
-else in the worker.
+else in the worker. Also since fixed: the same TOCTOU race already
+closed once for `check_rate_limit()` turned up again in `create_group()`
+and `join_group_by_code()` — each read the caller's current group count
+and compared it to their entitlement limit before inserting a new
+membership row, with no lock between, so two concurrent calls for the
+same user (two devices, or one of each function) could both pass the
+check and exceed the free/plus group cap Phase 47 added. Proven against
+real Postgres with an injected delay, both for two `join_group_by_code()`
+calls and for the cross-function case; closed the same way as
+`check_rate_limit()` was, with a shared advisory lock keyed on the user.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 
