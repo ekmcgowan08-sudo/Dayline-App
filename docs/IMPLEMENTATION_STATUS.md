@@ -2295,8 +2295,11 @@ photo is close to the most common per-user action in the whole app.
   way for `montages`. CI's Deno typecheck job is the first real
   verification this change gets; job-by-job confirmation recorded below
   once green.
-- ⏳ CI verification pending (to be recorded here once confirmed
-  job-by-job on a real run).
+- ✅ **Confirmed on real CI**: run 35304017629 (the 42nd consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `Edge Functions (Deno typecheck)` job's "Type-check every
+  function" step explicitly passed in ~9s, the first real verification
+  this change got (no local Deno was available in this sandbox).
 
 ---
 
