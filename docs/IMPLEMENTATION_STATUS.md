@@ -2239,8 +2239,11 @@ row — two separate statements with no lock between them.
 - ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/ci.yml`'s
   `database` job, right after the existing rate-limit race test.
 - ✅ Full local `run_all.sh` suite (all 22 test files) reruns clean.
-- ⏳ CI verification pending (to be recorded here once confirmed
-  job-by-job on a real run).
+- ✅ **Confirmed on real CI**: run 35176188332 (the 41st consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `database` job's new "Run group limit race test" step
+  explicitly passed in ~4s with no flake, not just inferred from the
+  run's overall summary status.
 
 ---
 
