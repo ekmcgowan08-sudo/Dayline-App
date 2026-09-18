@@ -2440,6 +2440,77 @@ pass the "is owner" check before either commits, and both succeed.
   step explicitly passed, not just inferred from the run's overall
   summary status.
 
+## Phase 60 — Fix a cross-function race leaving a group with zero owners
+
+Found while closing out Phase 59: that fix only serializes
+`transfer_group_ownership()` against *itself* — it never checked
+whether the exact same TOCTOU gap could still be reached from a
+*different* function racing it. It can:
+`transfer_group_ownership()` reads the target's role, and only if they
+still exist does it go on to demote the caller to `admin` and promote
+the target to `owner` — two separate writes, after that read.
+`remove_group_member()` never contends for `transfer_group_ownership()`'s
+lock at all, so if it deletes that exact target in the gap between the
+read and those writes, the promotion silently affects zero rows (an
+`UPDATE` matching no rows is not an error in Postgres) while the
+demotion still lands — a group left with the old owner correctly
+stepped down to `admin`, the target correctly removed, but nobody
+promoted to take their place: zero owners. This is not the gap Phase
+50's `group_members_owner_departure` trigger closes — that trigger only
+fires `after delete on group_members` `when old.role = 'owner'`, and
+here the owner's row is *updated* to `admin`, never deleted, so it
+never fires. A group left this way is stuck exactly like Phase 50's Bug
+2: `transfer_group_ownership()`, `set_group_member_role()`, and
+`delete_group()` all require an existing owner, so nobody can ever
+manage or delete the group again.
+
+- ✅ Proven against a real Postgres 16 instance before fixing: a group
+  with an owner, an admin, and a plain member, with a delay injected
+  into `transfer_group_ownership()` between its target-existence check
+  and its actual role updates. Fired `transfer_group_ownership(owner ->
+  member)` concurrently with `remove_group_member(admin removing that
+  same member)`. Both calls succeeded. Final state: the owner correctly
+  demoted to `admin`, the target correctly removed, but **zero** owner
+  rows left in the group. Also checked the reverse arrival order (the
+  removal committing first) — correctly resolves either way once fixed,
+  confirmed below.
+- ✅ `supabase/migrations/20260903070000_zero_owner_race_fix.sql`:
+  `remove_group_member()` now takes the same `'group_ownership:'`
+  advisory lock `transfer_group_ownership()` already uses (Phase 59),
+  keyed on the group id. Whichever function gets there first for a
+  given group runs to completion before the other proceeds, so each
+  function's own existing checks see up-to-date data: if the transfer
+  commits first, the target is already `owner` by the time
+  `remove_group_member()` re-reads their role, and its own
+  `cannot_remove_owner` guard correctly refuses to remove them; if the
+  removal commits first, the target is already gone by the time
+  `transfer_group_ownership()` re-reads them, and its own `not_a_member`
+  guard correctly refuses the transfer without ever touching the
+  caller's role.
+- ✅ Re-ran the identical race (both arrival orders) against the fixed
+  functions and got the correct result each time: exactly one owner
+  remains, with the other function's call correctly rejected
+  (`cannot_remove_owner` or `not_a_member` as appropriate). Discrimination-
+  tested: reverted just `remove_group_member()` to its pre-fix body and
+  reran the exact same race — it reproduced the zero-owner bug precisely;
+  restored and reran clean.
+- ✅ `supabase/tests/zero_owner_race.test.sh` (new, same shape as the
+  other three `.sh` race tests this session): instruments the actual
+  deployed `transfer_group_ownership()` with a delay between its target
+  check and its updates, fires it concurrently with
+  `remove_group_member()` targeting the same user, asserts the group
+  ends up with exactly one owner (either function winning the race is
+  correct — only ending up with zero is a failure).
+  Discrimination-tested: pointed at migrations applied only up through
+  before Phase 59/60, failed immediately with "no longer takes the
+  group_ownership advisory lock" before even attempting the race;
+  restored and reran clean against a fresh database.
+- ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
+  ci.yml`'s `database` job, right after the transfer ownership race
+  test. Full local `run_all.sh` suite (25 test files) reruns clean.
+- ⏳ CI verification pending (to be recorded here once confirmed
+  job-by-job on a real run).
+
 ---
 
 ## Environment constraints discovered this session

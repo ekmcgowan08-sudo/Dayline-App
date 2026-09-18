@@ -291,7 +291,13 @@ owner to two different targets could both pass the check and both
 succeed, leaving a group with two owners (nothing in the schema stops
 more than one). Proven against real Postgres, closed the same way as
 the other three: an advisory lock keyed on the group, taken before the
-check.
+check. Also since fixed: a related cross-function variant of the same
+gap — the new lock only serializes transfer_group_ownership() against
+itself, not against remove_group_member(), so an owner transferring
+ownership to a member while an admin concurrently removes that same
+member could leave the group with zero owners instead of two,
+permanently stuck the same way a group with no owner already could be
+(Phase 50). Closed by having remove_group_member() take the same lock.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

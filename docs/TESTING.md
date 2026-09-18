@@ -167,6 +167,22 @@ All three are also wired into `.github/workflows/ci.yml`.
   acquires its fix's advisory lock, fires the same two-target race,
   asserts exactly one caller succeeds and the group ends up with
   exactly one owner, then restores the real function unchanged.
+- `zero_owner_race.test.sh` — same shape again, this time for a
+  *cross-function* variant found while closing out the one above:
+  `transfer_group_ownership()`'s own lock only serializes it against
+  itself, not against `remove_group_member()`, which never contends for
+  that lock at all. Proven against a real Postgres 16 instance: an
+  owner transferring ownership to a member while an admin concurrently
+  removes that same member can leave the group with the old owner
+  correctly demoted to `admin`, the target correctly removed, but
+  nobody promoted to `owner` — zero owners, permanently stuck (every
+  function that manages roles or deletes the group requires an existing
+  owner). The test instruments the deployed `transfer_group_ownership()`
+  with a delay between its target-existence check and its actual role
+  updates — the exact gap the bug lived in — fires it concurrently with
+  `remove_group_member()` targeting the same user, and asserts the
+  group ends up with exactly one owner (either function winning is
+  correct; only zero is a failure).
 - `orphaned_montage_storage_purge.test.sql` — proves the `BEFORE DELETE`
   trigger on `montages` (`20260902010000_orphaned_montage_storage_purge.sql`)
   queues a deleted row's `storage_path` into `pending_storage_purges`,
