@@ -2434,8 +2434,11 @@ pass the "is owner" check before either commits, and both succeed.
 - ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
   ci.yml`'s `database` job, right after the group limit race test. Full
   local `run_all.sh` suite (24 test files) reruns clean.
-- ⏳ CI verification pending (to be recorded here once confirmed
-  job-by-job on a real run).
+- ✅ **Confirmed on real CI**: run 35359533377 (the 44th consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `database` job's new "Run transfer ownership race test"
+  step explicitly passed, not just inferred from the run's overall
+  summary status.
 
 ---
 
