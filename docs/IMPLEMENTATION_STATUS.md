@@ -2514,6 +2514,66 @@ manage or delete the group again.
   explicitly passed, not just inferred from the run's overall summary
   status.
 
+## Phase 61 — Fix a TOCTOU race in join_group_by_code's invite-code brute-force limit
+
+Found by extending this session's TOCTOU sweep from RPCs that call the
+shared `check_rate_limit()` to the one place that doesn't:
+`join_group_by_code()`'s invite-code guard predates that shared
+function and rolled its own — a hand-counted check against
+`invite_code_attempts` (20 attempts per 10 minutes) with the exact same
+read-then-insert shape `check_rate_limit()` had before Phase 38, since
+it never got migrated onto the fixed, lock-protected version.
+
+- ✅ Proven against a real Postgres 16 instance before fixing: with a
+  delay injected between the count check and the rest of the function,
+  fired 25 concurrent `join_group_by_code()` calls with a deliberately
+  invalid code for the same user. All 25 came back
+  `invalid_or_expired_code` — none were rejected as `rate_limited`, and
+  25 rows landed in `invite_code_attempts`, five over the stated limit.
+  This guard exists specifically to slow down someone guessing a
+  private group's invite code; bypassing it via concurrency means an
+  attacker firing requests in parallel faces no meaningful rate limit
+  at all.
+- ✅ `supabase/migrations/20260903080000_invite_attempts_race_fix.sql`:
+  same pattern as every other fix in this session's TOCTOU class — a
+  `pg_advisory_xact_lock` keyed on the calling user's id (namespaced
+  `'invite_attempts:'`), taken before the count read. Acquired before
+  the `'group_limit:'` lock already inside this same function (Phase
+  56), so the two locks are always taken in the same order by every
+  caller and can't deadlock against each other.
+- ✅ Re-ran the identical 25-concurrent-caller race against the fixed
+  function: exactly 20 pass the rate check, the other 5 correctly come
+  back `rate_limited`, exactly 20 rows land in `invite_code_attempts`.
+  Discrimination-tested: reverted to the pre-fix function and reran —
+  reproduced the bypass precisely (25 attempts, no rejections); restored
+  and reran clean.
+- ✅ `supabase/tests/invite_attempts_race.test.sh` (new, same shape as
+  the other five `.sh` race tests this session): instruments the actual
+  deployed function with a delay right after it acquires its
+  `invite_attempts` lock, fires 25 concurrent calls with an invalid code
+  for a fresh user, asserts exactly 20 pass the rate check and exactly
+  20 attempt rows land. Discrimination-tested against the pre-fix
+  function — failed immediately with "no longer takes the
+  invite_attempts advisory lock" before even attempting the race;
+  restored and reran clean against a fresh database.
+- ✅ Caught and fixed a real ordering bug in this session's own test
+  suite while wiring this in: `group_limit_race.test.sh`'s cleanup step
+  restores `join_group_by_code()` from its own fix migration (Phase 56)
+  to undo its instrumentation — but that migration predates this one,
+  so blindly reapplying it after this fix was already deployed silently
+  regressed `join_group_by_code()` back to having no `invite_attempts`
+  lock for the remainder of a `run_all.sh` run. Caught by running the
+  full local suite end-to-end (not just each new test file in
+  isolation) and seeing `invite_attempts_race.test.sh` fail with the
+  "no longer takes the lock" diagnostic even though the fix migration
+  itself was correct. Fixed by having `group_limit_race.test.sh` also
+  re-apply this migration, after its own, in its cleanup step.
+- ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
+  ci.yml`'s `database` job, right after the zero owner race test. Full
+  local `run_all.sh` suite (26 test files) reruns clean end-to-end.
+- ⏳ CI verification pending (to be recorded here once confirmed
+  job-by-job on a real run).
+
 ---
 
 ## Environment constraints discovered this session

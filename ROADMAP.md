@@ -298,6 +298,14 @@ ownership to a member while an admin concurrently removes that same
 member could leave the group with zero owners instead of two,
 permanently stuck the same way a group with no owner already could be
 (Phase 50). Closed by having remove_group_member() take the same lock.
+Also since fixed: join_group_by_code()'s own invite-code brute-force
+guard predates check_rate_limit() and rolled its own counter with the
+same read-then-insert race — 25 concurrent calls with an invalid code
+for the same user all passed the stated 20-per-10-minutes limit,
+meaning an attacker guessing a private group's invite code faced no
+real rate limit if they simply fired requests in parallel. Closed the
+same way as the rest of this class, with an advisory lock keyed on the
+user.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

@@ -123,6 +123,8 @@ jobs:
         run: bash supabase/tests/transfer_ownership_race.test.sh postgres
       - name: Run zero owner race test
         run: bash supabase/tests/zero_owner_race.test.sh postgres
+      - name: Run invite attempts race test
+        run: bash supabase/tests/invite_attempts_race.test.sh postgres
       - name: Run orphaned montage storage purge test suite
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/orphaned_montage_storage_purge.test.sql postgres
       - name: Run moderator RPC service-role grant test suite

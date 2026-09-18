@@ -183,6 +183,18 @@ All three are also wired into `.github/workflows/ci.yml`.
   `remove_group_member()` targeting the same user, and asserts the
   group ends up with exactly one owner (either function winning is
   correct; only zero is a failure).
+- `invite_attempts_race.test.sh` — same shape again, for
+  `join_group_by_code()`'s own hand-rolled invite-code brute-force
+  guard (`20260903080000_invite_attempts_race_fix.sql`), which predates
+  `check_rate_limit()` and has the identical read-then-insert shape
+  that function had before Phase 38. Proven against a real Postgres 16
+  instance: 25 concurrent `join_group_by_code()` calls with an invalid
+  code for the same user all passed the 20-per-10-minutes rate check —
+  none were rejected, so an attacker guessing invite codes in parallel
+  faces no real limit. The test instruments the deployed function with
+  a delay right after it acquires its lock, fires the same 25-caller
+  race, and asserts exactly 20 pass with exactly 20 attempt rows
+  recorded.
 - `orphaned_montage_storage_purge.test.sql` — proves the `BEFORE DELETE`
   trigger on `montages` (`20260902010000_orphaned_montage_storage_purge.sql`)
   queues a deleted row's `storage_path` into `pending_storage_purges`,

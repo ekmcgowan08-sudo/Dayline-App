@@ -31,6 +31,12 @@ set -euo pipefail
 DB_NAME="${1:?usage: group_limit_race.test.sh <db_name>}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FIX_MIGRATION="${SCRIPT_DIR}/../migrations/20260903040000_group_limit_race_fix.sql"
+# join_group_by_code() is redefined again by 20260903080000 (Phase 61,
+# the invite-code attempt-rate-limit fix) — restoring only from this
+# migration would silently regress that later fix for the rest of a
+# run_all.sh run, since create-or-replace overwrites whichever version
+# ran last. Re-applied after FIX_MIGRATION below so both fixes stack.
+LATER_JOIN_MIGRATION="${SCRIPT_DIR}/../migrations/20260903080000_invite_attempts_race_fix.sql"
 LOCK_MARKER="perform pg_advisory_xact_lock(hashtextextended('group_limit:' || auth.uid()::text, 0));"
 
 for fn in "create_group(text,text)" "join_group_by_code(text)"; do
@@ -154,7 +160,8 @@ if [ "${TOTAL_GROUPS}" != "2" ]; then
 fi
 echo "PASS: race 2 — exactly one of create_group()/join_group_by_code() passed the group limit, user stayed at 2 groups."
 
-echo "--- restoring the real create_group()/join_group_by_code() from their migration ---"
+echo "--- restoring the real create_group()/join_group_by_code() from their migrations ---"
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${FIX_MIGRATION}" >/dev/null
+psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATER_JOIN_MIGRATION}" >/dev/null
 
 echo "PASS: group_limit_race.test.sh"
