@@ -119,6 +119,8 @@ jobs:
         run: bash supabase/tests/rate_limit_race.test.sh postgres
       - name: Run group limit race test
         run: bash supabase/tests/group_limit_race.test.sh postgres
+      - name: Run transfer ownership race test
+        run: bash supabase/tests/transfer_ownership_race.test.sh postgres
       - name: Run orphaned montage storage purge test suite
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/orphaned_montage_storage_purge.test.sql postgres
       - name: Run moderator RPC service-role grant test suite

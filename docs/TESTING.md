@@ -153,6 +153,20 @@ All three are also wired into `.github/workflows/ci.yml`.
   real concurrent `psql` connections during development (both arrival
   orders) and is documented in `docs/IMPLEMENTATION_STATUS.md` Phase 58
   rather than re-proven here.
+- `transfer_ownership_race.test.sh` — same shape and same reason as
+  `rate_limit_race.test.sh`/`group_limit_race.test.sh`, for a fourth
+  instance of this TOCTOU class found in `transfer_group_ownership()`
+  (`20260903060000_transfer_ownership_race_fix.sql`): it checked the
+  caller currently holds `role = 'owner'`, then updated two rows
+  further down, with no lock between — nothing in the schema stops a
+  group from ending up with two `owner` rows. Proven against a real
+  Postgres 16 instance: an owner with two other members who fires two
+  concurrent `transfer_group_ownership()` calls to two different
+  targets ends up with **two** owners, not one. The test instruments
+  the actual deployed function with a delay injected right after it
+  acquires its fix's advisory lock, fires the same two-target race,
+  asserts exactly one caller succeeds and the group ends up with
+  exactly one owner, then restores the real function unchanged.
 - `orphaned_montage_storage_purge.test.sql` — proves the `BEFORE DELETE`
   trigger on `montages` (`20260902010000_orphaned_montage_storage_purge.sql`)
   queues a deleted row's `storage_path` into `pending_storage_purges`,

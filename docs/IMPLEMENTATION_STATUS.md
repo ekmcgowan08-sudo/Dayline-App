@@ -2384,6 +2384,59 @@ app reads from.
   the changed `revenuecat-webhook/index.ts`, not just inferred from the
   run's overall summary status.
 
+## Phase 59 — Fix a TOCTOU race letting transfer_group_ownership create two owners
+
+Found by extending the same "read a value, decide, then write" check to
+every other function this session's other three fixes hadn't already
+covered — `transfer_group_ownership()` (`20260831230000_group_role_
+management.sql`) checks the caller currently holds `role = 'owner'`,
+then updates two rows further down (demote the caller to `admin`,
+promote the target to `owner`), with no lock between. Nothing in the
+schema enforces at most one `owner` row per group —
+`group_members_role_check` only constrains which *values* the column
+can hold, not how many rows can hold each one — so two concurrent
+transfer calls by the same owner to two different targets can both
+pass the "is owner" check before either commits, and both succeed.
+
+- ✅ Proven against a real Postgres 16 instance before fixing: a group
+  with an owner and two plain members, fired two concurrent
+  `transfer_group_ownership()` calls from the owner to the two
+  different members (delay injected between the read and the writes to
+  force overlap). Both calls returned `{"ok": true}`. Final state: the
+  original owner correctly demoted to `admin`, but **both** targets
+  promoted to `owner` — a group left with two owners, violating the
+  single-owner invariant this function's own introducing migration is
+  explicit about closing ("this closes that dead end," not opening a
+  new one).
+- ✅ `supabase/migrations/20260903060000_transfer_ownership_race_fix.sql`:
+  takes a `pg_advisory_xact_lock` keyed on the group id before the
+  authorization check — whichever caller gets there first blocks the
+  other until its transaction commits, so the second caller's own "is
+  owner" check then correctly sees the first caller's completed
+  transfer and fails with `not_authorized` instead of racing past it.
+  `set_group_member_role()` never touches the `owner` role (only ever
+  grants `admin`/`member`, refuses to change an existing owner's role),
+  so it can't create a second owner and doesn't need this lock.
+- ✅ Re-ran the identical race against the fixed function and got the
+  correct result: exactly one call succeeds, the other correctly fails
+  `not_authorized`, exactly one owner remains. Discrimination-tested:
+  reverted to the pre-fix function and reran the exact same race — it
+  reproduced the two-owner bug precisely; restored and reran clean.
+- ✅ `supabase/tests/transfer_ownership_race.test.sh` (new, same shape
+  as `rate_limit_race.test.sh`/`group_limit_race.test.sh`): instruments
+  the actual deployed function with a delay after it acquires its lock,
+  fires two concurrent transfers to different targets, asserts exactly
+  one succeeds and the group ends up with exactly one owner.
+  Discrimination-tested: pointed at the pre-fix function, failed
+  immediately with "no longer takes the group_ownership advisory lock"
+  before even attempting the race; restored and reran clean against a
+  freshly migrated database.
+- ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
+  ci.yml`'s `database` job, right after the group limit race test. Full
+  local `run_all.sh` suite (24 test files) reruns clean.
+- ⏳ CI verification pending (to be recorded here once confirmed
+  job-by-job on a real run).
+
 ---
 
 ## Environment constraints discovered this session

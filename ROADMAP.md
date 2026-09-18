@@ -283,7 +283,15 @@ newer purchase, a real pattern webhook senders produce) could let the
 older event win depending on which write committed last, silently
 downgrading a paying customer. Proven against real Postgres, closed by
 collapsing the check and the write into one atomic conditional upsert
-instead of two separate calls.
+instead of two separate calls. Also since fixed: the same race turned
+up a fourth time in `transfer_group_ownership()` — it checked the
+caller currently held the owner role, then wrote two rows further
+down, with no lock between, so two concurrent transfers by the same
+owner to two different targets could both pass the check and both
+succeed, leaving a group with two owners (nothing in the schema stops
+more than one). Proven against real Postgres, closed the same way as
+the other three: an advisory lock keyed on the group, taken before the
+check.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 
