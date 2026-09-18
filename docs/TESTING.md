@@ -364,6 +364,19 @@ No live Supabase project exists in this development sandbox to invoke
   handful of `curl` calls (see each function's own header comment for its
   request shape) is the fastest way to close this gap — tracked in
   `docs/OWNER_ACTIONS_REQUIRED.md`.
+- `delete-account`'s Phase 57 addition (cleaning up the `avatars` and
+  `exports` buckets, alongside the pre-existing `clips`/`montages`
+  cleanup) is the same "no live Supabase project" gap in a sharper
+  form: this sandbox's egress policy also blocks `deno.land` directly,
+  so even a local `deno check` couldn't be run before pushing. The new
+  code calls the identical `admin.storage.from(bucket).list()`/
+  `.remove()` methods the same function's `clips`/`montages` steps
+  already use and CI has already type-checked clean, against a table
+  and column (`data_export_requests.storage_path`) queried the same
+  way `montages.storage_path` already is a few lines above — so this
+  leans on that existing, CI-verified pattern rather than exercising
+  new API surface, but CI's Deno typecheck job on the actual push is
+  still the first real check this specific change gets.
 
 ## The primary end-to-end user journey (from the project brief)
 

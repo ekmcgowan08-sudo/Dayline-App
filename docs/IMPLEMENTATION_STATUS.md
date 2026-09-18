@@ -2245,6 +2245,59 @@ row — two separate statements with no lock between them.
   explicitly passed in ~4s with no flake, not just inferred from the
   run's overall summary status.
 
+## Phase 57 — Fix delete-account leaking avatar + data-export storage files
+
+Found by re-checking `delete-account`'s storage cleanup against every
+bucket a user can actually write to, the same "does this cascade
+respect what other code already enforces" lens as Phase 50, applied to
+Storage instead of `groups`. `delete-account/index.ts` explicitly lists
+and removes the user's `clips` and `montages` storage objects before
+calling `admin.auth.admin.deleteUser()` — because, as Phase 39 already
+established, a Postgres `on delete cascade` deletes the *row*
+referencing a storage path, not the underlying file object in Supabase
+Storage. That reasoning applies identically to two buckets the function
+never touched: `avatars` (`profiles.id references auth.users(id) on
+delete cascade`) and `exports` (`data_export_requests.user_id
+references auth.users(id) on delete cascade`, added in Phase 20's
+automated fulfillment pipeline). Every account that ever set a profile
+photo or requested a data export left that file behind in storage
+forever after deleting their account — not a corner case; a profile
+photo is close to the most common per-user action in the whole app.
+
+- ✅ Confirmed by code inspection against the exact cascade chains
+  already documented in this function's own comments and in
+  `20260831090000_avatars_bucket.sql` / `20260831210000_data_export_
+  fulfillment.sql`: neither bucket had any cleanup step, and nothing
+  else in the schema (no trigger, no scheduled purge function) covers
+  either — unlike `montages`, which Phase 39 gave a dedicated
+  `queue_montage_storage_purge()` trigger specifically because a
+  database cascade can reach `pending_storage_purges` (another table)
+  but never Supabase Storage's API directly.
+- ✅ `supabase/functions/delete-account/index.ts`: added two new steps,
+  mirroring the existing `clips`/`montages` steps exactly — list and
+  remove the user's `avatars` bucket objects (by folder, not by
+  assuming the single stable `${userId}/avatar` path Phase 45
+  introduced, so this also sweeps up any legacy timestamped avatar left
+  over from before that fix), and remove the storage file at every
+  fulfilled `data_export_requests.storage_path` row for that user.
+- ⚠️ Verification tier, stated honestly: this repository has no Deno
+  test harness for Edge Functions at all (they're covered by the
+  `Edge Functions (Deno typecheck)` CI job only, never a functional
+  test — a gap that predates this fix), and this sandbox's egress
+  policy blocks `deno.land` directly (confirmed: `curl` to the official
+  install script returned a 403), so `deno check` could not be run
+  locally either. The new code was verified by inspection: it calls the
+  exact same `admin.storage.from(bucket).list(path, opts)` /
+  `.remove(paths)` methods already exercised (and already type-checked
+  clean on CI) by this same function's `clips`/`montages` steps two
+  lines above, against a table (`data_export_requests`) and column
+  (`storage_path`) that already exist and are already queried the same
+  way for `montages`. CI's Deno typecheck job is the first real
+  verification this change gets; job-by-job confirmation recorded below
+  once green.
+- ⏳ CI verification pending (to be recorded here once confirmed
+  job-by-job on a real run).
+
 ---
 
 ## Environment constraints discovered this session

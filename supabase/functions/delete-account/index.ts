@@ -54,7 +54,31 @@ Deno.serve(async (req) => {
     if (m.storage_path) await admin.storage.from('montages').remove([m.storage_path]);
   }
 
-  // 3. Remove the auth user. Every table in this schema has user_id/owner
+  // 3. Remove the user's avatar (same reasoning as clips/montages above —
+  // profiles.id cascades on auth.users deletion below, but a database
+  // cascade can't reach into Supabase Storage, so the actual file would
+  // otherwise be orphaned forever). Listed rather than assuming the single
+  // stable `${userId}/avatar` path uploadAvatar() writes today (Phase 45),
+  // so this also sweeps up any legacy timestamped avatar left over from
+  // before that fix.
+  const { data: avatarObjects } = await admin.storage.from('avatars').list(userId, { limit: 1000 });
+  if (avatarObjects && avatarObjects.length > 0) {
+    await admin.storage.from('avatars').remove(avatarObjects.map((o) => `${userId}/${o.name}`));
+  }
+
+  // 4. Remove the user's fulfilled data-export files (same reasoning —
+  // data_export_requests cascades on auth.users deletion below, but that
+  // never touches the `exports` bucket file fulfill-data-export uploaded).
+  const { data: exportRequests } = await admin
+    .from('data_export_requests')
+    .select('storage_path')
+    .eq('user_id', userId)
+    .not('storage_path', 'is', null);
+  for (const r of exportRequests ?? []) {
+    if (r.storage_path) await admin.storage.from('exports').remove([r.storage_path]);
+  }
+
+  // 5. Remove the auth user. Every table in this schema has user_id/owner
   // foreign keys with `on delete cascade` (or `on delete set null` for
   // audit-style columns like moderation_actions.actor_id) back to
   // auth.users, so this single call cascades the deletion through
@@ -65,7 +89,7 @@ Deno.serve(async (req) => {
   const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
   if (deleteError) return json({ error: 'deletion_failed' }, 500);
 
-  // 4. Record a standalone, non-identifying audit entry that survives the
+  // 6. Record a standalone, non-identifying audit entry that survives the
   // user row's own deletion — proof the deletion happened without
   // retaining any of the deleted person's data.
   await admin.from('account_deletion_audit').insert({

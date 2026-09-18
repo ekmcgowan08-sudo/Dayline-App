@@ -265,6 +265,15 @@ check and exceed the free/plus group cap Phase 47 added. Proven against
 real Postgres with an injected delay, both for two `join_group_by_code()`
 calls and for the cross-function case; closed the same way as
 `check_rate_limit()` was, with a shared advisory lock keyed on the user.
+Also since fixed: `delete-account` cleaned up a departing user's
+`clips` and `montages` storage objects before removing their auth row,
+but never their avatar or any fulfilled data-export file — both
+buckets are reachable only through a database row (`profiles`,
+`data_export_requests`) whose cascade delete removes the row, not the
+underlying Storage object, so every account that ever set a profile
+photo or requested an export left that file behind forever. Closed by
+adding the same list-and-remove step already used for clips/montages,
+for both buckets.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 
