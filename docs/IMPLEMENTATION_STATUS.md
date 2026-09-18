@@ -2376,8 +2376,13 @@ app reads from.
   ci.yml`'s `database` job, right after the group owner account
   deletion test. Full local `run_all.sh` suite (23 test files) reruns
   clean.
-- ⏳ CI verification pending (to be recorded here once confirmed
-  job-by-job on a real run).
+- ✅ **Confirmed on real CI**: run 35358443244 (the 43rd consecutive
+  clean run, first attempt), all 7 jobs passed, checked individually per
+  job — the `database` job's new "Run revenuecat event race fix test
+  suite" step explicitly passed, and the `Edge Functions (Deno
+  typecheck)` job's "Type-check every function" step explicitly passed
+  the changed `revenuecat-webhook/index.ts`, not just inferred from the
+  run's overall summary status.
 
 ---
 
