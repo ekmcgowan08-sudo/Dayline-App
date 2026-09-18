@@ -2301,6 +2301,84 @@ photo is close to the most common per-user action in the whole app.
   function" step explicitly passed in ~9s, the first real verification
   this change got (no local Deno was available in this sandbox).
 
+## Phase 58 — Fix a TOCTOU race in revenuecat-webhook's stale-event guard
+
+Found by re-checking every place in this codebase with the same
+"read a value, compare it, then write" shape already fixed twice this
+session for `check_rate_limit()` (Phase 38) and the group-count limit
+(Phase 56) — `revenuecat-webhook`'s out-of-order-event protection
+(Phase 32) has the identical shape, just split across two separate
+Supabase-js calls in application code instead of two statements inside
+one Postgres function: it read `subscriptions.last_event_at`, compared
+it to the incoming event's own timestamp, and only *then* upserted.
+RevenueCat's webhook delivery gives no ordering guarantee and does
+retry on transient failures, so two concurrent deliveries for the same
+user (a redelivered stale event racing a legitimate newer one) is a
+real delivery pattern, not a hypothetical one — and this is the only
+writer of `subscriptions`, the table every paid-feature check in this
+app reads from.
+
+- ✅ Reproduced against a real Postgres 16 instance before fixing, by
+  running the exact two-statement sequence the Edge Function performs:
+  seeded a subscription with `last_event_at = 2026-01-01`, then fired a
+  legitimate newer event (`last_event_at = 2026-06-02`, tier `plus`)
+  concurrently with a stale redelivered older event (`last_event_at =
+  2026-06-01`, tier `free`). Both reads happened before either write,
+  so both passed their own staleness check against the *original*
+  2026-01-01 value, unaware of each other. The newer event's write
+  landed first but was silently overwritten by the older event's
+  later-committing write — final state `free`/`expired`/2026-06-01, a
+  paying customer's subscription downgraded by a stale webhook
+  redelivery racing the real purchase event.
+- ✅ `supabase/migrations/20260903050000_revenuecat_event_race_fix.sql`:
+  new `apply_revenuecat_event()` (service-role only) collapses the
+  read-check-write into one atomic statement —
+  `INSERT ... ON CONFLICT (user_id) DO UPDATE ... WHERE` evaluates its
+  `WHERE` clause against the target row *while holding that row's
+  lock*, so a concurrent caller for the same user blocks on the row
+  lock until the first caller's transaction commits, then re-evaluates
+  against the now-current data. No advisory lock needed — the
+  conflict-target row lock already serializes this by construction.
+  Caught a real bug in the fix itself before it ever reached CI:
+  `get diagnostics v_applied = row_count` assigns an integer into a
+  variable declared `boolean`, which only surfaced as a Postgres type
+  error the moment the function was actually called under the
+  concurrent test below — exactly the kind of mistake this session's
+  "reproduce and discrimination-test everything" discipline exists to
+  catch before it ships, not after.
+- ✅ `supabase/functions/revenuecat-webhook/index.ts`: replaced the
+  select-then-upsert with a single `admin.rpc('apply_revenuecat_event',
+  ...)` call.
+- ✅ Re-ran the identical concurrent scenario against the fixed function
+  (both arrival orders — newer-first and older-first) and got the
+  correct result both times: whichever event is chronologically newer
+  always wins, regardless of which write actually committed first.
+  Discrimination-tested: temporarily redefined the function with its
+  `WHERE` guard removed (an unconditional upsert, mirroring the original
+  bug) and reran the exact same race — it reproduced the bug precisely
+  (`free`/`expired`/2026-06-01, the stale event winning again); restored
+  the real fix and reran clean.
+- ✅ `supabase/tests/revenuecat_event_race_fix.test.sql` (new): a
+  standard single-connection pgTAP test proving the function's logic —
+  first-ever event always applies, a strictly older event is rejected
+  and leaves the row untouched, a strictly newer event applies, an
+  event at the exact same timestamp still applies (idempotent
+  redelivery, not silently dropped), and an event with no timestamp
+  always applies. The concurrency/atomicity guarantee itself can't be
+  expressed in a single-connection `.sql` file (same limitation
+  `rate_limit_race.test.sh`/`group_limit_race.test.sh` already
+  document) — that was proven separately above against real concurrent
+  connections. Discrimination-tested: pointed at the same
+  guard-removed function, it failed immediately on the second
+  assertion ("a strictly older event must be rejected") with a clear
+  diagnostic; restored and reran clean.
+- ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
+  ci.yml`'s `database` job, right after the group owner account
+  deletion test. Full local `run_all.sh` suite (23 test files) reruns
+  clean.
+- ⏳ CI verification pending (to be recorded here once confirmed
+  job-by-job on a real run).
+
 ---
 
 ## Environment constraints discovered this session

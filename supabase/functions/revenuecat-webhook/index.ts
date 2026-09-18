@@ -59,32 +59,29 @@ Deno.serve(async (req) => {
   // delivery-order guarantee. A redelivered older event (e.g. a stale
   // CANCELLATION retry arriving after a newer upgrade already applied)
   // must not overwrite a subscription with stale data — see the
-  // migration comment on subscriptions.last_event_at.
-  const incomingEventAt = event.purchased_at_ms ? new Date(event.purchased_at_ms) : null;
-  if (incomingEventAt) {
-    const { data: existing } = await admin.from('subscriptions').select('last_event_at').eq('user_id', event.app_user_id).maybeSingle();
-    if (existing?.last_event_at && new Date(existing.last_event_at) > incomingEventAt) {
-      return json({ ok: true, skipped: 'stale_event' });
-    }
-  }
-
+  // migration comment on subscriptions.last_event_at. The check and the
+  // write both happen inside apply_revenuecat_event() as a single atomic
+  // statement (see 20260903050000_revenuecat_event_race_fix.sql) — doing
+  // it as a separate read here, then a write, would leave the exact
+  // window that migration proved exploitable: two concurrent deliveries
+  // for the same user could both read the pre-race state and the older
+  // one could still win depending on which write commits last.
+  const incomingEventAt = event.purchased_at_ms ? new Date(event.purchased_at_ms).toISOString() : null;
   const hasPlus = (event.entitlement_ids ?? []).includes(ENTITLEMENT_ID_PLUS);
   const expired = EXPIRING_EVENT_TYPES.has(event.type);
 
-  const { error } = await admin.from('subscriptions').upsert({
-    user_id: event.app_user_id,
-    tier: hasPlus && !expired ? 'plus' : 'free',
-    entitlement: hasPlus && !expired ? 'plus' : 'free',
-    status: expired ? 'expired' : 'active',
-    product_id: event.product_id ?? null,
-    revenuecat_app_user_id: event.app_user_id,
-    period_type: (event.period_type?.toLowerCase() as 'normal' | 'trial' | 'intro' | 'grace' | undefined) ?? null,
-    expires_at: event.expiration_at_ms ? new Date(event.expiration_at_ms).toISOString() : null,
-    will_renew: !expired,
-    ...(incomingEventAt ? { last_event_at: incomingEventAt.toISOString() } : {}),
-    updated_at: new Date().toISOString(),
+  const { data: applied, error } = await admin.rpc('apply_revenuecat_event', {
+    p_user_id: event.app_user_id,
+    p_tier: hasPlus && !expired ? 'plus' : 'free',
+    p_entitlement: hasPlus && !expired ? 'plus' : 'free',
+    p_status: expired ? 'expired' : 'active',
+    p_product_id: event.product_id ?? null,
+    p_period_type: (event.period_type?.toLowerCase() as 'normal' | 'trial' | 'intro' | 'grace' | undefined) ?? null,
+    p_expires_at: event.expiration_at_ms ? new Date(event.expiration_at_ms).toISOString() : null,
+    p_will_renew: !expired,
+    p_incoming_event_at: incomingEventAt,
   });
 
   if (error) return json({ error: error.message }, 500);
-  return json({ ok: true });
+  return json({ ok: true, ...(applied === false ? { skipped: 'stale_event' } : {}) });
 });

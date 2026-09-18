@@ -137,6 +137,22 @@ All three are also wired into `.github/workflows/ci.yml`.
   the same-function and cross-function races, asserts exactly one caller
   succeeds in each and the user ends up in exactly 2 groups, then
   restores the real functions unchanged.
+- `revenuecat_event_race_fix.test.sql` — proves `apply_revenuecat_event()`
+  (`20260903050000_revenuecat_event_race_fix.sql`), the third instance of
+  this same TOCTOU class found this session, this time in
+  `revenuecat-webhook`'s out-of-order-event guard (Phase 32): a first-ever
+  event for a user always applies, a strictly older event is rejected and
+  leaves the row untouched, a strictly newer event applies, an event at
+  the exact same timestamp as the one already applied still applies
+  (idempotent redelivery, not silently dropped), and an event with no
+  timestamp always applies. Unlike the two `.sh` scripts above, this one
+  is a plain single-connection `.sql` file — the fix here collapses the
+  race into one atomic `INSERT ... ON CONFLICT DO UPDATE ... WHERE`
+  statement, so there's no separate read-then-write step left to inject
+  a delay into; the concurrency guarantee itself was proven with two
+  real concurrent `psql` connections during development (both arrival
+  orders) and is documented in `docs/IMPLEMENTATION_STATUS.md` Phase 58
+  rather than re-proven here.
 - `orphaned_montage_storage_purge.test.sql` — proves the `BEFORE DELETE`
   trigger on `montages` (`20260902010000_orphaned_montage_storage_purge.sql`)
   queues a deleted row's `storage_path` into `pending_storage_purges`,

@@ -273,7 +273,17 @@ buckets are reachable only through a database row (`profiles`,
 underlying Storage object, so every account that ever set a profile
 photo or requested an export left that file behind forever. Closed by
 adding the same list-and-remove step already used for clips/montages,
-for both buckets.
+for both buckets. Also since fixed: the same read-then-write race
+already closed twice this session (`check_rate_limit()`, the group
+count limit) turned up a third time in `revenuecat-webhook`'s
+out-of-order-event guard — it read the subscription's last-event
+timestamp, compared it, and only then upserted, so two concurrent
+deliveries for the same user (a stale redelivery racing a legitimate
+newer purchase, a real pattern webhook senders produce) could let the
+older event win depending on which write committed last, silently
+downgrading a paying customer. Proven against real Postgres, closed by
+collapsing the check and the write into one atomic conditional upsert
+instead of two separate calls.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 
