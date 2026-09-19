@@ -100,7 +100,16 @@ psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -tAc "
   select remove_group_member('${GROUP_ID}'::uuid, 'ffffffff-1111-1111-1111-111111111103'::uuid);
 " > "${RESULT_B}" 2>&1 &
 PID_B=$!
-wait "${PID_A}" "${PID_B}"
+# remove_group_member()'s failure paths are plain PL/pgSQL `raise
+# exception` (not a jsonb return like transfer_group_ownership()'s), so
+# when it loses this race the underlying psql call exits non-zero —
+# the correct, expected outcome, not a test failure. `wait` on a
+# specific PID returns that PID's own exit status, which would trip
+# `set -e` and kill this script before it ever reaches the assertion
+# below. The actual pass/fail check reads real DB state (OWNER_COUNT),
+# not either racer's exit code, so swallow both here.
+wait "${PID_A}" || true
+wait "${PID_B}" || true
 
 OWNER_COUNT="$(psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -tAc "select count(*) from group_members where group_id = '${GROUP_ID}'::uuid and role = 'owner';")"
 

@@ -2571,8 +2571,39 @@ it never got migrated onto the fixed, lock-protected version.
 - ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
   ci.yml`'s `database` job, right after the zero owner race test. Full
   local `run_all.sh` suite (26 test files) reruns clean end-to-end.
-- ⏳ CI verification pending (to be recorded here once confirmed
-  job-by-job on a real run).
+- ⚠️ **First real CI attempt (run 35394974936) failed** — the `database`
+  job's "Run zero owner race test" step (Phase 60, unrelated to this
+  Phase's own code) failed with exit code 1 and no diagnostic printed.
+  Root cause, found from the job's raw log and the Postgres service
+  container's own log (captured in the job's post-cleanup step): the
+  underlying SQL was **correct** — `remove_group_member()` genuinely
+  lost its race against `transfer_group_ownership()` and correctly
+  raised `cannot_remove_owner`, exactly the intended outcome — but
+  `remove_group_member()`'s failure paths are plain PL/pgSQL `raise
+  exception`, unlike `transfer_group_ownership()`'s (and every other
+  raced function's) jsonb-return failures. A `psql` call that raises an
+  unhandled exception exits non-zero, and `zero_owner_race.test.sh`'s
+  `wait "${PID_A}" "${PID_B}"` propagates that specific PID's exit
+  status, tripping `set -e` and killing the script before it could ever
+  print a result — before this session's local runs happened to observe
+  only the other arrival order (`transfer_group_ownership` losing,
+  which returns jsonb normally), so the flake never showed up locally.
+  The identical latent bug existed in `group_limit_race.test.sh`'s race
+  2 (`create_group()` also fails via `raise exception`) but hadn't yet
+  been hit by chance. Fixed both by splitting the combined `wait` into
+  two separate `wait ... || true` calls — the actual pass/fail
+  assertion already reads real database state (owner/group counts),
+  never either racer's exit code, so there was nothing to lose by
+  ignoring it. Verified by rerunning each fixed script 5 times against
+  a fresh database — both arrival orders (including the exact
+  previously-fatal one) observed, all 10 runs passed. Full local
+  `run_all.sh` suite reruns clean end-to-end afterward. This is a
+  test-infrastructure bug, not a regression in the actual fix — the
+  underlying `group_ownership`/`group_limit` advisory locks worked
+  correctly throughout, as the raw Postgres log for the failing run
+  itself proves.
+- ⏳ CI verification pending on the corrected test scripts (to be
+  recorded here once confirmed job-by-job on a real run).
 
 ---
 

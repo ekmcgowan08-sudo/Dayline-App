@@ -142,7 +142,15 @@ run_create "${RESULT_A}" &
 PID_A=$!
 run_join "${CODE_A}" "${RESULT_B}" &
 PID_B=$!
-wait "${PID_A}" "${PID_B}"
+# create_group()'s failure paths are plain PL/pgSQL `raise exception`
+# (unlike join_group_by_code()'s jsonb-return failures), so when it
+# loses this race the underlying psql call exits non-zero — the
+# correct, expected outcome, not a test failure. `wait` on a specific
+# PID returns that PID's own exit status, which would trip `set -e`
+# and kill this script before it reaches the assertion below, which
+# reads real DB state rather than either racer's exit code.
+wait "${PID_A}" || true
+wait "${PID_B}" || true
 
 CREATE_OK=0; if grep -qF "race new group" "${RESULT_A}"; then CREATE_OK=1; fi
 JOIN_OK=0; if grep -q '"ok": true' "${RESULT_B}"; then JOIN_OK=1; fi
