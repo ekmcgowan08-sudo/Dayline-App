@@ -37,6 +37,12 @@ FIX_MIGRATION="${SCRIPT_DIR}/../migrations/20260903040000_group_limit_race_fix.s
 # run_all.sh run, since create-or-replace overwrites whichever version
 # ran last. Re-applied after FIX_MIGRATION below so both fixes stack.
 LATER_JOIN_MIGRATION="${SCRIPT_DIR}/../migrations/20260903080000_invite_attempts_race_fix.sql"
+# create_group()/join_group_by_code() are redefined again by 20260903090000
+# (Phase 62, account suspension enforcement) — same staleness hazard as
+# above: without reapplying this too, the rest of a run_all.sh run would
+# silently lose the suspension check on both functions. Reapplied last so
+# every later fix stacks on top of every earlier one.
+LATEST_SUSPENSION_MIGRATION="${SCRIPT_DIR}/../migrations/20260903090000_account_suspension_enforcement.sql"
 LOCK_MARKER="perform pg_advisory_xact_lock(hashtextextended('group_limit:' || auth.uid()::text, 0));"
 
 for fn in "create_group(text,text)" "join_group_by_code(text)"; do
@@ -171,5 +177,6 @@ echo "PASS: race 2 — exactly one of create_group()/join_group_by_code() passed
 echo "--- restoring the real create_group()/join_group_by_code() from their migrations ---"
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${FIX_MIGRATION}" >/dev/null
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATER_JOIN_MIGRATION}" >/dev/null
+psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATEST_SUSPENSION_MIGRATION}" >/dev/null
 
 echo "PASS: group_limit_race.test.sh"

@@ -20,6 +20,13 @@ set -euo pipefail
 DB_NAME="${1:?usage: invite_attempts_race.test.sh <db_name>}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FIX_MIGRATION="${SCRIPT_DIR}/../migrations/20260903080000_invite_attempts_race_fix.sql"
+# join_group_by_code() is redefined again by 20260903090000 (Phase 62,
+# account suspension enforcement) — restoring only from FIX_MIGRATION
+# below would silently strip that later check out of join_group_by_code()
+# for the rest of a run_all.sh run, the same staleness hazard already hit
+# once in group_limit_race.test.sh. Reapplied after FIX_MIGRATION so both
+# fixes stack.
+LATER_SUSPENSION_MIGRATION="${SCRIPT_DIR}/../migrations/20260903090000_account_suspension_enforcement.sql"
 LOCK_MARKER="perform pg_advisory_xact_lock(hashtextextended('invite_attempts:' || auth.uid()::text, 0));"
 
 DEPLOYED_DEF="$(psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -tAc "select pg_get_functiondef('join_group_by_code(text)'::regprocedure);")"
@@ -83,5 +90,6 @@ fi
 
 echo "--- restoring the real join_group_by_code() from its migration ---"
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${FIX_MIGRATION}" >/dev/null
+psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATER_SUSPENSION_MIGRATION}" >/dev/null
 
 echo "PASS: invite_attempts_race.test.sh — exactly 20 of 25 concurrent racers passed the invite-code attempt limit."

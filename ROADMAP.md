@@ -305,7 +305,18 @@ for the same user all passed the stated 20-per-10-minutes limit,
 meaning an attacker guessing a private group's invite code faced no
 real rate limit if they simply fired requests in parallel. Closed the
 same way as the rest of this class, with an advisory lock keyed on the
-user.
+user. Also since fixed: moderator_suspend_user() set
+profiles.account_status = 'suspended' but nothing else in the codebase
+ever read it — a suspended account (including one suspended for
+illegal content, per docs/MODERATION_RUNBOOK.md's explicit CSAM/
+credible-threat instruction) could still capture new clips, comment,
+react, and create or join groups, completely unaffected. Proven
+against real Postgres before fixing. Closed with RLS `with check`
+suspension checks on clips/comments/reactions inserts plus an explicit
+check inside the three security-definer group RPCs that bypass RLS
+(create_group, join_group_by_code, contribute_clip_to_group), while
+deliberately leaving a suspended user's read/delete access to their
+own existing content, account deletion, and data export untouched.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

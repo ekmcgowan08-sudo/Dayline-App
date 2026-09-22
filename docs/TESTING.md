@@ -232,6 +232,19 @@ All three are also wired into `.github/workflows/ci.yml`.
   membership, and a sole owner's account deletion auto-promotes the
   earliest-joined remaining member to owner — who is then verified to
   actually exercise owner powers, not just hold the role label.
+- `account_suspension_enforcement.test.sql` — proves
+  `20260903090000_account_suspension_enforcement.sql`: a user suspended
+  via `moderator_suspend_user()` (the RPC `MODERATION_RUNBOOK.md`
+  instructs moderators to call for a serious violation or illegal
+  content) is blocked from inserting a new clip, posting a comment or
+  reaction, and from `create_group()`/`join_group_by_code()`, while
+  still able to `SELECT`/`DELETE` a clip they created before being
+  suspended. Before this fix, `account_status = 'suspended'` was set by
+  that RPC but read nowhere else in the codebase, so none of the above
+  were actually blocked — proven against a real Postgres 16 instance:
+  a suspended user could still insert clips and create groups with no
+  error. Also asserts an unrelated non-suspended user is unaffected by
+  any of the new checks.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 

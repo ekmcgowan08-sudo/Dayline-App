@@ -2615,6 +2615,102 @@ it never got migrated onto the fixed, lock-protected version.
 
 ---
 
+## Phase 62 — Fix moderator_suspend_user() having zero actual effect
+
+Found by switching lenses after exhausting the TOCTOU-race sweep:
+"does a server-side moderation flag actually get enforced anywhere?"
+`moderator_suspend_user()` (Phase-earlier, `20260831030000_moderation_
+and_blocks.sql`) sets `profiles.account_status = 'suspended'` and logs
+a `moderation_actions` row — but an exhaustive grep across every SQL
+migration, every Edge Function, and the mobile client found the column
+is written and never read anywhere else. `docs/MODERATION_RUNBOOK.md`
+explicitly instructs moderators to suspend an account for a serious or
+repeat violation, and — far more seriously — names it as the one
+concrete, immediate safety action for illegal content (CSAM, credible
+threats): "suspend the account immediately." As shipped, that action
+did nothing.
+
+- ✅ Reproduced against a real Postgres 16 instance before fixing:
+  created a user, suspended them via the actual `moderator_suspend_
+  user()` RPC using the runbook's own example reason ("CSAM report"),
+  then — still logged in as that same suspended user — successfully
+  inserted a new clip row directly (the same write path the mobile
+  app's capture flow uses) and successfully called `create_group()` to
+  create a brand-new group. Both succeeded with no error.
+- ✅ `supabase/migrations/20260903090000_account_suspension_
+  enforcement.sql` (new):
+  - `is_account_suspended()`: a small `stable security definer` SQL
+    function checking the caller's own `profiles.account_status`.
+  - `clips`' `"own clips"` policy split into an unchanged `using`
+    (ownership — governs SELECT/UPDATE-old-row/DELETE) and a new
+    `with check (... and not is_account_suspended())` (governs INSERT
+    and UPDATE-new-row) — a suspended user keeps full access to their
+    own existing clips but can't create new ones.
+  - `comments`/`reactions` INSERT policies (from `20260901000000_
+    comment_reaction_rate_limiting.sql`) gained the same `and not
+    is_account_suspended()` in their `with check` clauses.
+  - `create_group()`, `join_group_by_code()`, `contribute_clip_to_
+    group()` — all three `security definer`, so they bypass RLS on the
+    tables they write to and needed an explicit in-function check —
+    gained a suspension check right after their existing auth checks.
+    `create_group()`/`contribute_clip_to_group()` raise `account_
+    suspended` (matching their existing exception convention);
+    `join_group_by_code()` returns `{"ok": false, "error":
+    "account_suspended"}` (matching its existing jsonb-return
+    convention).
+  - Deliberately **not** touched: SELECT of a suspended user's own
+    existing content, DELETE of their own rows, `delete-account`,
+    and data export — suspension blocks creating and spreading more
+    content, not a user's access to their own existing data or their
+    ability to leave. Also deliberately not extended (yet) to group
+    role-management RPCs or to reading already-rendered content
+    (`get-montage-url`, `get-export-url`) — narrower calls left for a
+    follow-up rather than broadened here without the same real-infra
+    verification this fix itself required.
+- ✅ Re-ran the identical reproduction against the fixed database as
+  the same suspended user: direct clip insert now fails with "new row
+  violates row-level security policy for table clips"; `create_group()`
+  now raises `account_suspended`; `join_group_by_code()` now returns
+  `{"ok": false, "error": "account_suspended"}`. Also confirmed the
+  user could still `SELECT` and `DELETE` their own pre-existing clip.
+- ✅ Discrimination-tested: temporarily stubbed `is_account_suspended()`
+  to always return `false` — the clip insert then got past RLS and
+  failed on a *different*, later constraint (proving RLS was no longer
+  the blocker), confirming the RLS check is what was actually stopping
+  it. Restored the real fix and reconfirmed both the clip insert and
+  `create_group()` failed again with the expected errors.
+- ✅ `supabase/tests/account_suspension_enforcement.test.sql` (new,
+  plain pgTAP `.sql` — no real concurrency needed here, unlike the
+  race fixes): suspends a real user via `moderator_suspend_user()`,
+  asserts they can no longer insert a clip, comment, reaction, create a
+  group, or join a group by code, asserts they can still SELECT and
+  DELETE a clip they created before being suspended, and asserts an
+  unrelated non-suspended user is completely unaffected by any of these
+  checks.
+- ✅ Caught and fixed the same test-suite staleness hazard this session
+  already hit once in Phase 61: `group_limit_race.test.sh` and
+  `invite_attempts_race.test.sh` both restore `create_group()`/`join_
+  group_by_code()` from their own (now-stale) fix migrations as part of
+  undoing their test instrumentation. Left as-is, either script running
+  before this test in `run_all.sh` would silently strip this Phase's
+  suspension check back out of both functions for the rest of the
+  suite. Caught by running the full local suite end-to-end (not just
+  the new test file in isolation) — `account_suspension_enforcement.
+  test.sql`'s `create_group()`/`join_group_by_code()` assertions failed
+  with the group successfully created/joined, exactly the pre-fix
+  symptom, even though the fix migration itself was correct. Fixed by
+  having both scripts also re-apply `20260903090000_account_
+  suspension_enforcement.sql`, after their own migrations, in their
+  cleanup steps. Full local `run_all.sh` suite (27 test files) reruns
+  clean end-to-end afterward.
+- ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
+  ci.yml`'s `database` job, right after the revenuecat event race fix
+  test.
+- ⏳ CI verification pending — will check job-by-job once pushed and
+  record the confirmation here.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:
