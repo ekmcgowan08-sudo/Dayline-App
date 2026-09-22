@@ -2602,8 +2602,16 @@ it never got migrated onto the fixed, lock-protected version.
   underlying `group_ownership`/`group_limit` advisory locks worked
   correctly throughout, as the raw Postgres log for the failing run
   itself proves.
-- ⏳ CI verification pending on the corrected test scripts (to be
-  recorded here once confirmed job-by-job on a real run).
+- ✅ **Confirmed on real CI**: run 35452986165, all 7 jobs passed,
+  checked individually per job — the `database` job's "Run zero owner
+  race test" (~2s) and "Run invite attempts race test" (~13s, 25 real
+  concurrent connections, no flake) steps both explicitly passed, not
+  just inferred from the run's overall summary status. The two prior
+  runs on this branch (35394974936 for Phase 61, and 35394139016 for
+  the Phase 60 docs-confirm commit before it) both failed on exactly
+  the exit-code flake this fix addresses — this is the 1st consecutive
+  clean run of a new streak, not a continuation of the count from
+  before those two failures.
 
 ---
 
