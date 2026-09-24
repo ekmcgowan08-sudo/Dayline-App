@@ -2706,8 +2706,11 @@ did nothing.
 - ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
   ci.yml`'s `database` job, right after the revenuecat event race fix
   test.
-- ⏳ CI verification pending — will check job-by-job once pushed and
-  record the confirmation here.
+- ✅ **Confirmed on real CI**: run 35685887276 (commit 017d3e0), all 7
+  jobs checked individually — not inferred from the run's aggregate
+  `conclusion` — and all `success`, including the `database` job's new
+  "Run account suspension enforcement test suite" step (step 31,
+  completed in well under a second, no flake).
 
 ---
 
