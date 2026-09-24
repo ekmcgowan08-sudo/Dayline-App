@@ -2814,8 +2814,10 @@ count is still accurate immediately before that delete.
 - ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
   ci.yml`'s `database` job, right after the account suspension
   enforcement test.
-- ⏳ CI verification pending — will check job-by-job once pushed and
-  record the confirmation here.
+- ✅ **Confirmed on real CI**: run 35949690392 (commit 5c63d6a), all 7
+  jobs checked individually — not inferred from the run's aggregate
+  `conclusion` — and all `success`, including the `database` job's new
+  "Run leave group race test" step (step 32, ~2 seconds, no flake).
 
 ---
 
