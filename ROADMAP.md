@@ -317,6 +317,20 @@ check inside the three security-definer group RPCs that bypass RLS
 (create_group, join_group_by_code, contribute_clip_to_group), while
 deliberately leaving a suspended user's read/delete access to their
 own existing content, account deletion, and data export untouched.
+Also since fixed: a fifth instance of the TOCTOU class in
+leave_group() — it read a group's member count, then much later (after
+deleting the caller's own membership row and logging the departure)
+acted on that stale count to decide whether to delete the whole group,
+with no lock stopping a concurrent join_group_by_code() from adding a
+new member in the gap. Proven against real Postgres: a sole owner
+leaving while someone else concurrently joined via the group's invite
+code let join_group_by_code() report success for a group that
+leave_group() then silently deleted out from under the new member,
+cascading their just-committed membership away with it. Closed the
+same way as the rest of this class, with both functions now taking the
+same per-group advisory lock transfer_group_ownership()/remove_group_
+member() already use, restructured in join_group_by_code() to avoid a
+lock-ordering deadlock against leave_group()'s own row-level delete.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

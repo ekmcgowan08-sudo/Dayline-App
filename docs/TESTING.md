@@ -245,6 +245,22 @@ All three are also wired into `.github/workflows/ci.yml`.
   a suspended user could still insert clips and create groups with no
   error. Also asserts an unrelated non-suspended user is unaffected by
   any of the new checks.
+- `leave_group_race.test.sh` — proves `20260903100000_leave_group_race_
+  fix.sql`: a fifth instance of this session's TOCTOU class, this time in
+  `leave_group()` — it read a group's member count, then much later (after
+  deleting the caller's own membership, logging a membership event, and
+  firing the owner-departure trigger) acted on that stale count to decide
+  whether to delete the whole group, with nothing stopping a concurrent
+  `join_group_by_code()` from adding a brand new member in the gap.
+  Proven against a real Postgres 16 instance: a sole owner leaving while
+  a second user concurrently joins via the group's invite code let
+  `join_group_by_code()` return `{"ok": true, ...}` for a group that
+  `leave_group()` then silently deleted out from under it — the joiner
+  told they'd joined a group that, moments later, no longer existed. The
+  test instruments each function in turn with a delay right after it
+  acquires its fix's `'group_ownership:'` advisory lock, to exercise both
+  possible arrival orders, and asserts `join_group_by_code()`'s reported
+  outcome is never inconsistent with real database state in either one.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 

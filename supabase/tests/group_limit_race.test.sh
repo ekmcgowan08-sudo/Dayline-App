@@ -43,6 +43,11 @@ LATER_JOIN_MIGRATION="${SCRIPT_DIR}/../migrations/20260903080000_invite_attempts
 # silently lose the suspension check on both functions. Reapplied last so
 # every later fix stacks on top of every earlier one.
 LATEST_SUSPENSION_MIGRATION="${SCRIPT_DIR}/../migrations/20260903090000_account_suspension_enforcement.sql"
+# join_group_by_code() is redefined YET AGAIN by 20260903100000 (Phase 63,
+# the leave_group() zero-owner-race fix) — same hazard one level further:
+# without reapplying this too, the rest of a run_all.sh run would lose
+# its group_ownership advisory lock. Reapplied last of all.
+LATEST_LEAVE_GROUP_MIGRATION="${SCRIPT_DIR}/../migrations/20260903100000_leave_group_race_fix.sql"
 LOCK_MARKER="perform pg_advisory_xact_lock(hashtextextended('group_limit:' || auth.uid()::text, 0));"
 
 for fn in "create_group(text,text)" "join_group_by_code(text)"; do
@@ -178,5 +183,6 @@ echo "--- restoring the real create_group()/join_group_by_code() from their migr
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${FIX_MIGRATION}" >/dev/null
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATER_JOIN_MIGRATION}" >/dev/null
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATEST_SUSPENSION_MIGRATION}" >/dev/null
+psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATEST_LEAVE_GROUP_MIGRATION}" >/dev/null
 
 echo "PASS: group_limit_race.test.sh"

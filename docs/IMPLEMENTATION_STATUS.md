@@ -2714,6 +2714,111 @@ did nothing.
 
 ---
 
+## Phase 63 — Fix leave_group()'s TOCTOU race silently deleting a group a new member just joined
+
+Found while auditing group-membership functions for the same read-then-
+act shape already fixed six times this session, in the one function none
+of those fixes had touched: `leave_group()`. It reads the group's current
+member count, then — much later, after deleting the caller's own
+`group_members` row, inserting a `group_membership_events` row, and
+firing the `group_members_owner_departure` trigger — acts on that count
+to decide whether to delete the entire group. Nothing re-verifies the
+count is still accurate immediately before that delete.
+
+- ✅ Proven against a real Postgres 16 instance before fixing: a sole
+  owner of a group, with a delay injected right after `leave_group()`'s
+  member-count read, calls `leave_group()` while a second user
+  concurrently calls `join_group_by_code()` with that group's still-
+  active invite code. `join_group_by_code()` runs to completion and
+  returns `{"ok": true, "group": {...}}` — by every signal the API gives
+  that caller, they are now a real member of a real group.
+  `leave_group()` then resumes with its stale pre-join count of 1, sees
+  "owner, count <= 1", and deletes the entire `groups` row, cascading
+  away the second user's just-committed `group_members` row along with
+  it. The joiner is told they joined a group that, moments later,
+  silently no longer exists.
+  - Also empirically ruled out a narrower, different interleaving before
+    landing on this one: when `leave_group()` reaches its own `insert
+    into group_membership_events` (which references the group and so
+    takes an incidental foreign-key `FOR KEY SHARE` lock on the parent
+    `groups` row) before a concurrent joiner's `select ... for update`
+    on that same row, the joiner blocks on that FK lock until
+    `leave_group()`'s whole transaction commits or rolls back — so that
+    particular ordering was already accidentally safe, confirmed via
+    `pg_locks`/`pg_stat_activity` showing the joiner's backend waiting
+    on `leave_group()`'s transaction id. The count-read-then-much-later-
+    act ordering above is not safe, and doesn't depend on that
+    coincidence either way — this fix removes the race outright rather
+    than relying on it.
+- ✅ `supabase/migrations/20260903100000_leave_group_race_fix.sql`:
+  - `leave_group()` now takes the same `'group_ownership:'`
+    `pg_advisory_xact_lock` `transfer_group_ownership()`/`remove_group_
+    member()` already use (Phase 59/60), right after confirming the
+    caller is a member, before reading the member count that drives its
+    delete-the-group decision.
+  - `join_group_by_code()` now takes the same lock, keyed on the group
+    id resolved from the invite code, before doing any authoritative
+    check or write against that group. Its previous `select ... for
+    update` on `groups` only ever serialized it against other
+    `join_group_by_code()` calls, never against `leave_group()`/
+    `transfer_group_ownership()`/`remove_group_member()` — replaced with
+    a plain, unlocked lookup of the group id followed by the advisory
+    lock and a full authoritative re-check (code status/expiry,
+    existence) once the lock is held.
+  - Lock-ordering note (to avoid a real deadlock, not just a
+    hypothetical one — worked through explicitly before writing the
+    fix): `join_group_by_code()` deliberately resolves the group id
+    with an *unlocked* lookup, not `for update`, before taking the
+    advisory lock. Taking any row lock on `groups` first would let it
+    hold that row lock while blocked waiting on `'group_ownership:'`,
+    while `leave_group()` could simultaneously hold `'group_ownership:'`
+    while blocked on that same row lock via its own later `delete from
+    groups` — a classic AB-BA deadlock. With the advisory lock always
+    acquired before any row-level lock on `groups`, that cycle can't
+    form.
+- ✅ Re-ran the identical race against the fixed functions, instrumented
+  both ways (delay after `leave_group()`'s lock, and separately after
+  `join_group_by_code()`'s lock) to exercise both possible arrival
+  orders: whichever function gets the lock first now runs to completion
+  before the other proceeds, and the other always re-reads fully
+  up-to-date state afterward. Both orderings produced consistent
+  outcomes — either the join is cleanly rejected (`invalid_or_expired_
+  code`) because the group is genuinely already gone, or the group
+  survives intact with the new member really in it and `leave_group()`
+  correctly raises `owner_must_transfer_or_delete` instead of destroying
+  anything. No more split between what the API reports and what the
+  database actually holds, in either order.
+- ✅ Discrimination-tested: the exact real-Postgres reproduction above
+  (unfixed functions, `{"ok": true, ...}` followed by the group and the
+  new member's row both vanishing) *is* the discrimination test — ran
+  again against the restored fix afterward and reconfirmed clean.
+  Additionally ran the new permanent test script itself against a
+  database built from every migration except this fix and confirmed it
+  fails immediately with its own "no longer takes the group_ownership
+  advisory lock" diagnostic, before ever attempting the race.
+- ✅ `supabase/tests/leave_group_race.test.sh` (new): pulls both
+  functions' actual deployed definitions, asserts both still take the
+  `'group_ownership:'` lock, then tests both arrival orders (delay
+  injected after each function's lock acquisition in turn) against a
+  fresh sole-owner group and a would-be joiner, asserting the API's
+  reported outcome for `join_group_by_code()` is never inconsistent with
+  real database state, then restores both real functions.
+- ✅ Caught and fixed the same test-suite staleness hazard this session
+  has now hit three times: `group_limit_race.test.sh` and
+  `invite_attempts_race.test.sh` both restore `join_group_by_code()`
+  from their own (now twice-stale) fix migrations as part of undoing
+  their instrumentation. Fixed both by having them also re-apply
+  `20260903100000_leave_group_race_fix.sql`, last, in their cleanup
+  steps. Full local `run_all.sh` suite (28 test files) reruns clean
+  end-to-end afterward.
+- ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
+  ci.yml`'s `database` job, right after the account suspension
+  enforcement test.
+- ⏳ CI verification pending — will check job-by-job once pushed and
+  record the confirmation here.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:
