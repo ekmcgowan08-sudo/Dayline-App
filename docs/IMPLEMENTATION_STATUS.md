@@ -2913,8 +2913,53 @@ concurrent reproduction surfaced a bug with no race required at all.
   clean, zero occurrences of that error.
 - ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
   ci.yml`'s `database` job, right after the leave group race test.
-- ⏳ CI verification pending — will check job-by-job once pushed and
-  record the confirmation here.
+- ✅ **Confirmed on real CI**: run 42562570521 (commit 35dc7ba) and
+  again on run 42563350434 (commit d296a3c, see below), the `database`
+  job (`Supabase schema (migrations + RLS security tests)`) checked
+  job-by-job both times — all `success`, including the new "Run
+  orphaned group on departure test suite" (step 33) and "Run orphaned
+  group race test" (step 34) steps.
+- ⚠️ **CI detour, unrelated to this fix**: run 42562570521's aggregate
+  `conclusion` was `failure` — not from anything in this phase's diff,
+  but from the separate `Dependency audit (high/critical fails the
+  build)` job, which ran a plain `npm audit --audit-level=high` against
+  `mobile`'s already-installed dependencies and failed on CVEs
+  (including one newly `critical`: shell-quote command injection,
+  `GHSA-pqg4-j6r4-53mv`) published against transitive packages
+  (`node-forge`, `shell-quote`, `source-map-js`, `undici`, `uuid`,
+  `zod`) in the real-world time gap since this branch's previous CI run
+  — confirmed unrelated by checking that same job on the immediately
+  preceding commit (9cbe955, run 35950053385): clean, and that commit's
+  diff touches no `package.json`/`package-lock.json` anywhere. Pushed
+  `d296a3c` (`npm audit fix`, no `--force`): resolves the critical
+  finding and most highs via in-range transitive bumps only —
+  `package-lock.json` changed, `package.json` did not, no major-version
+  bump. Verified safe before pushing: `mobile`'s typecheck, lint, and
+  full Jest suite (12 suites / 53 tests) all still pass clean locally;
+  `worker`'s own `npm audit --audit-level=high` was already clean
+  (0 vulnerabilities), untouched.
+  - **Still red after that push, deliberately**: 3 high-severity
+    findings remain (`decode-uri-component`, `glob`, `minimatch`), all
+    transitively required by `expo`/`expo-router` themselves and
+    fixable only via `npm audit fix --force`, which npm's own output
+    states would bump `expo`/`expo-router` to new major versions. That
+    is a real framework migration — not a lockfile bump — with its own
+    blast radius (native module compatibility, Metro config, the whole
+    mobile build) that this session has no way to validate end-to-end
+    here (no device/simulator, no `expo start`). Forcing it through
+    unsupervised as a side effect of this branch's Postgres/backend
+    work would be exactly the kind of unrelated scope-widening the
+    house rules for CI failures warn against; the proposed patch is
+    `npm audit fix --force` in `mobile/`, left for a deliberate,
+    separately-validated Expo upgrade rather than applied here.
+  - Confirmed via job-by-job check of run 42563350434 (commit d296a3c):
+    `Dependency audit` is still `failure` (exactly the 3 remaining highs
+    above, `cd worker` step correctly `skipped` after `cd mobile` fails
+    first), while all other 6 jobs — including the `database` job and
+    both of this phase's own new test steps — are `success`. This
+    phase's actual fix is fully verified; the one red job is a tracked,
+    pre-existing, unrelated dependency-security gap, not a regression
+    from this work.
 
 ---
 

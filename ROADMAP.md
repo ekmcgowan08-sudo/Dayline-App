@@ -360,6 +360,18 @@ tier on every piece.
   SQL-editor step).
 - Replace placeholder icon/splash assets with real Dayline branding (see
   `docs/ASSET_LICENSES.md`).
+- A deliberate, separately-validated Expo/expo-router major-version
+  upgrade in `mobile/`. Found while chasing Phase 64's CI run: `npm
+  audit fix` (no `--force`) cleared the critical and most high-severity
+  transitive-dependency findings, but three highs (`decode-uri-
+  component`, `glob`, `minimatch`) are only fixable via `npm audit fix
+  --force`, which bumps `expo`/`expo-router` to new major versions —
+  a real framework migration (native module compatibility, Metro
+  config, the whole mobile build), not a lockfile bump, and this
+  session has no device/simulator to validate it end-to-end. Tracked
+  here rather than forced through as a side effect of unrelated work;
+  CI's `Dependency audit` job will stay red on `high` until this is
+  done.
 
 ## Milestone 3 — Reveal & memories polish
 
