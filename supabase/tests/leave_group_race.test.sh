@@ -31,6 +31,15 @@ set -euo pipefail
 DB_NAME="${1:?usage: leave_group_race.test.sh <db_name>}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FIX_MIGRATION="${SCRIPT_DIR}/../migrations/20260903100000_leave_group_race_fix.sql"
+# leave_group() is redefined again by 20260903110000 (Phase 64, the
+# account-deletion orphaned-group fix) — restoring only from FIX_MIGRATION
+# would regress leave_group() to a version that still does its own
+# `insert into group_membership_events` unconditionally in the last-
+# member-leaving branch, which now fails its own foreign key check once
+# the (already-upgraded, never-downgraded) group_members_owner_departure
+# trigger deletes the group first. Reapplied after FIX_MIGRATION so both
+# fixes stack, same staleness hazard already hit repeatedly this session.
+LATER_ORPHAN_MIGRATION="${SCRIPT_DIR}/../migrations/20260903110000_orphaned_group_on_departure_fix.sql"
 LOCK_MARKER="perform pg_advisory_xact_lock(hashtextextended('group_ownership:' || p_group_id::text, 0));"
 JOIN_LOCK_MARKER="perform pg_advisory_xact_lock(hashtextextended('group_ownership:' || v_group_id::text, 0));"
 
@@ -116,6 +125,7 @@ echo "PASS: race 1 — no split between what join_group_by_code() reported and r
 
 echo "--- restoring the real leave_group() before race 2 ---"
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${FIX_MIGRATION}" >/dev/null
+psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATER_ORPHAN_MIGRATION}" >/dev/null
 
 echo "--- race 2: join_group_by_code() delayed, concurrent leave_group() by the sole owner ---"
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" <<'SQL' >/dev/null
@@ -172,5 +182,6 @@ echo "PASS: race 2 — no split between what join_group_by_code() reported and r
 
 echo "--- restoring the real leave_group()/join_group_by_code() from their migration ---"
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${FIX_MIGRATION}" >/dev/null
+psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATER_ORPHAN_MIGRATION}" >/dev/null
 
 echo "PASS: leave_group_race.test.sh"

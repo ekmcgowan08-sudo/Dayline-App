@@ -31,6 +31,12 @@ LATER_SUSPENSION_MIGRATION="${SCRIPT_DIR}/../migrations/20260903090000_account_s
 # the leave_group() zero-owner-race fix) — same hazard one level further.
 # Reapplied last of all.
 LATEST_LEAVE_GROUP_MIGRATION="${SCRIPT_DIR}/../migrations/20260903100000_leave_group_race_fix.sql"
+# That same migration also bundles a now-stale leave_group() (Phase 63's
+# version, without the Phase 64 guard that skips its own
+# group_membership_events insert when the group_members_owner_departure
+# trigger already deleted the group) — reapplying 20260903100000 above
+# regresses leave_group() right back to it. Reapplied last of all.
+LATEST_ORPHAN_MIGRATION="${SCRIPT_DIR}/../migrations/20260903110000_orphaned_group_on_departure_fix.sql"
 LOCK_MARKER="perform pg_advisory_xact_lock(hashtextextended('invite_attempts:' || auth.uid()::text, 0));"
 
 DEPLOYED_DEF="$(psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -tAc "select pg_get_functiondef('join_group_by_code(text)'::regprocedure);")"
@@ -96,5 +102,6 @@ echo "--- restoring the real join_group_by_code() from its migration ---"
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${FIX_MIGRATION}" >/dev/null
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATER_SUSPENSION_MIGRATION}" >/dev/null
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATEST_LEAVE_GROUP_MIGRATION}" >/dev/null
+psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATEST_ORPHAN_MIGRATION}" >/dev/null
 
 echo "PASS: invite_attempts_race.test.sh — exactly 20 of 25 concurrent racers passed the invite-code attempt limit."

@@ -141,6 +141,10 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/account_suspension_enforcement.test.sql postgres
       - name: Run leave group race test
         run: bash supabase/tests/leave_group_race.test.sh postgres
+      - name: Run orphaned group on departure test suite
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/orphaned_group_on_departure.test.sql postgres
+      - name: Run orphaned group race test
+        run: bash supabase/tests/orphaned_group_race.test.sh postgres
 
   dependency-audit:
     name: Dependency audit (high/critical fails the build)

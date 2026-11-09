@@ -331,6 +331,17 @@ same way as the rest of this class, with both functions now taking the
 same per-group advisory lock transfer_group_ownership()/remove_group_
 member() already use, restructured in join_group_by_code() to avoid a
 lock-ordering deadlock against leave_group()'s own row-level delete.
+Also since fixed: account deletion orphaning a group outright, found
+while checking whether it had the same race leave_group() just closed —
+it reaches the identical "this was the group's last member" state via
+auth.users' own cascade onto group_members rather than any RPC of
+ours, and the group_members_owner_departure trigger's "nobody left"
+branch was a no-op there, leaving the group existing forever with zero
+members and a live invite code. No race needed to prove it: a later,
+ordinary join via that code landed as a plain member with no owner, no
+admin, and no way to ever become one. Fixed by having that trigger
+also take the group_ownership lock and delete the group when it finds
+nobody left, mirroring leave_group()'s own behavior.
 See `docs/IMPLEMENTATION_STATUS.md` for the exact, honest verification
 tier on every piece.
 

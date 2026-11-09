@@ -2821,6 +2821,103 @@ count is still accurate immediately before that delete.
 
 ---
 
+## Phase 64 — Fix account deletion orphaning a group with a live invite code and no possible owner
+
+Found while checking whether account deletion — a completely separate
+code path from `leave_group()`, going through `admin.auth.admin.
+deleteUser()` rather than any of this session's own RPCs — had the same
+TOCTOU shape Phase 63 just closed. It does, and worse: a plain, non-
+concurrent reproduction surfaced a bug with no race required at all.
+
+- ✅ Reproduced against a real Postgres instance with **zero
+  concurrency**: a user creates a group, is its only member, and
+  deletes their account. `groups.created_by` is `ON DELETE SET NULL`
+  (Phase 50), so the group correctly survives — but with zero
+  `group_members` rows and its invite code still `active`, because the
+  `group_members_owner_departure` trigger's (Phase 50) "nobody left at
+  all" branch was a no-op, written assuming only `leave_group()` could
+  ever reach that state (and `leave_group()` always deletes the group
+  itself in that case). Sometime later, with no race at all, a
+  different user joins via that still-live code and lands as a plain
+  `'member'` — `join_group_by_code()` always inserts new joiners as
+  `'member'`, never `'owner'` — leaving an immediately broken,
+  unmanageable group: no owner, no admin, and no RPC anywhere lets a
+  plain member promote themselves.
+- ✅ Also reproduced the race variant: with the departing owner's
+  account-deletion transaction held open, a concurrent
+  `join_group_by_code()` call can land after the trigger's exists-check
+  already ran and saw zero members (the join hadn't committed yet under
+  READ COMMITTED), reaching the same broken end state one step earlier.
+- ✅ `supabase/migrations/20260903110000_orphaned_group_on_departure_
+  fix.sql`:
+  - `group_members_owner_departure()` now acquires the same
+    `'group_ownership:'` advisory lock every other group-membership-
+    changing function already takes (Phase 59/60/63), as its first
+    action. This is what actually closes the race: `join_group_by_
+    code()` (Phase 63) takes this same lock before its authoritative
+    re-check, so whichever of "the account-deletion cascade" or "a
+    concurrent join" gets there first for a given group now fully
+    resolves before the other proceeds. If the join wins, the trigger's
+    later exists-check correctly sees the new member and promotes them
+    to owner — better than merely safe. If the departure wins, the
+    join's re-check afterward correctly finds the group gone and
+    returns `invalid_or_expired_code` instead of a silent, inconsistent
+    success.
+  - Its previously-no-op "nobody left in this group at all" branch now
+    deletes the group, mirroring `leave_group()`'s own last-member-
+    leaving behavior — the only other place this state can arise.
+  - `leave_group()` simplified to rely on this: it no longer deletes
+    the group itself (the trigger, fired by its own `delete from
+    group_members` a few lines up, already does it by the time control
+    returns), and skips its own `group_membership_events` `'left'`
+    insert in exactly that case — that insert would otherwise fail its
+    own foreign key check once the group may already be gone.
+- ✅ Re-ran both reproductions against the fix: the no-concurrency case
+  now deletes the group (confirmed via `pg_get_functiondef`-based
+  instrumentation that both arrival orders of the race variant also
+  resolve correctly — deletion-wins cleanly rejects the join,
+  join-wins correctly auto-promotes the new member to owner).
+- ✅ Discrimination-tested: both reproductions above, run against the
+  pre-fix code, are themselves the discrimination test (the plain
+  reproduction fails loudly with a clear `raise exception`; the new
+  permanent tests, run against a database built from every migration
+  except this one, fail immediately on their own "no longer takes the
+  lock" diagnostic). Restored and reconfirmed clean.
+- ✅ `supabase/tests/orphaned_group_on_departure.test.sql` (new, plain
+  pgTAP `.sql` — the core bug needs no concurrency): proves a solo
+  member's account deletion deletes the group, and that its old invite
+  code no longer resolves to anything joinable.
+- ✅ `supabase/tests/orphaned_group_race.test.sh` (new): instruments the
+  actual deployed trigger (and separately, `join_group_by_code()`) with
+  a delay right after each acquires its lock, to exercise both arrival
+  orders, asserting the join's reported outcome is never inconsistent
+  with real database state in either one.
+- ✅ Caught and fixed the same test-suite staleness hazard this session
+  has now hit **four** times, in a subtler form than before:
+  `group_limit_race.test.sh` and `invite_attempts_race.test.sh` both
+  reapply `20260903100000_leave_group_race_fix.sql` (Phase 63) as part
+  of restoring `join_group_by_code()` — but that migration file also
+  *bundles* Phase 63's version of `leave_group()`, which doesn't have
+  this phase's "skip the event insert" guard. Reapplying it silently
+  regressed `leave_group()` back to raising a raw foreign-key-violation
+  error instead of cleanly succeeding, for the rest of a `run_all.sh`
+  run. Caught the same way as every prior instance: running the full
+  local suite end-to-end surfaced a real `ERROR: insert or update on
+  table "group_membership_events" violates foreign key constraint`
+  inside `leave_group_race.test.sh`'s own race 1 — absent across 5
+  standalone reruns of that same script, confirming it was this
+  staleness bug (triggered only once other suite state had run) and not
+  a genuine new race. Fixed by having both scripts also reapply
+  `20260903110000_orphaned_group_on_departure_fix.sql`, last. Verified
+  by rerunning the full local suite 3 times end-to-end afterward, all
+  clean, zero occurrences of that error.
+- ✅ Wired into `supabase/tests/run_all.sh` and `.github/workflows/
+  ci.yml`'s `database` job, right after the leave group race test.
+- ⏳ CI verification pending — will check job-by-job once pushed and
+  record the confirmation here.
+
+---
+
 ## Environment constraints discovered this session
 
 These bound what "verified" can honestly mean here:

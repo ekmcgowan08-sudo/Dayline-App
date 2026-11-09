@@ -261,6 +261,27 @@ All three are also wired into `.github/workflows/ci.yml`.
   acquires its fix's `'group_ownership:'` advisory lock, to exercise both
   possible arrival orders, and asserts `join_group_by_code()`'s reported
   outcome is never inconsistent with real database state in either one.
+- `orphaned_group_on_departure.test.sql` — proves `20260903110000_
+  orphaned_group_on_departure_fix.sql`: account deletion reaches the
+  same "this was the group's last member" state `leave_group()` handles,
+  but through `admin.auth.admin.deleteUser()`'s cascade onto
+  `group_members` rather than any RPC of our own, and the `group_
+  members_owner_departure` trigger's "nobody left" branch was a no-op —
+  so a solo member deleting their account left the group existing
+  forever with zero members and a still-active invite code. No
+  concurrency needed to prove it: a later, completely ordinary join via
+  that code landed the joiner as a plain `'member'` of an unmanageable
+  group with no owner, no admin, and no way for anyone to ever become
+  one. This test proves the group is now deleted instead, and that its
+  old invite code no longer resolves to anything joinable.
+- `orphaned_group_race.test.sh` — same fix, concurrent case: instruments
+  the actual deployed trigger (and separately `join_group_by_code()`)
+  with a delay right after each acquires its `'group_ownership:'` lock,
+  racing a held-open account deletion against a concurrent join in both
+  arrival orders, and asserts the join's reported outcome is never
+  inconsistent with real database state — either cleanly rejected
+  because the group is genuinely gone, or the joiner is correctly
+  auto-promoted to owner.
 - `run_all.sh` — runs all of the above in sequence; exit code reflects
   the first failure, if any.
 

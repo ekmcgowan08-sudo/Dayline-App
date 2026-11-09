@@ -48,6 +48,13 @@ LATEST_SUSPENSION_MIGRATION="${SCRIPT_DIR}/../migrations/20260903090000_account_
 # without reapplying this too, the rest of a run_all.sh run would lose
 # its group_ownership advisory lock. Reapplied last of all.
 LATEST_LEAVE_GROUP_MIGRATION="${SCRIPT_DIR}/../migrations/20260903100000_leave_group_race_fix.sql"
+# That same migration also bundles a now-stale leave_group() (Phase 63's
+# version, without the Phase 64 guard that skips its own
+# group_membership_events insert when the group_members_owner_departure
+# trigger already deleted the group) — reapplying 20260903100000 above
+# regresses leave_group() right back to it. Reapplied last of all so
+# every fix in this chain stacks correctly.
+LATEST_ORPHAN_MIGRATION="${SCRIPT_DIR}/../migrations/20260903110000_orphaned_group_on_departure_fix.sql"
 LOCK_MARKER="perform pg_advisory_xact_lock(hashtextextended('group_limit:' || auth.uid()::text, 0));"
 
 for fn in "create_group(text,text)" "join_group_by_code(text)"; do
@@ -184,5 +191,6 @@ psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${FIX_MIGRATION}" >/dev/null
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATER_JOIN_MIGRATION}" >/dev/null
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATEST_SUSPENSION_MIGRATION}" >/dev/null
 psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATEST_LEAVE_GROUP_MIGRATION}" >/dev/null
+psql -v ON_ERROR_STOP=1 -d "${DB_NAME}" -f "${LATEST_ORPHAN_MIGRATION}" >/dev/null
 
 echo "PASS: group_limit_race.test.sh"
